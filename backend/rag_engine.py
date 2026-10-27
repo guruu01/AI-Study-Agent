@@ -36,6 +36,16 @@ class RAGEngine:
                     collection_name=COLLECTION_NAME,
                     vectors_config=models.VectorParams(size=VECTOR_DIM, distance=models.Distance.COSINE)
                 )
+            # Ensure keyword payload indices exist for filtering & deletions
+            for field in ["filename", "user_id", "topic"]:
+                try:
+                    self.client.create_payload_index(
+                        collection_name=COLLECTION_NAME,
+                        field_name=field,
+                        field_schema=models.PayloadSchemaType.KEYWORD
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             print(f"Warning ensuring collection: {e}")
 
@@ -342,21 +352,48 @@ class RAGEngine:
         Deletes all chunks of a document from Qdrant and removes file from disk.
         """
         try:
-            # Filter points by filename
-            filter_conditions = [
-                models.FieldCondition(key="filename", match=models.MatchValue(value=filename))
-            ]
-            if user_id and user_id not in ["admin", "common"]:
-                # Match user's own uploads or default_student
-                filter_conditions.append(
-                    models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id))
+            point_ids = []
+            try:
+                # Scroll points matching filename
+                scroll_res, _ = self.client.scroll(
+                    collection_name=COLLECTION_NAME,
+                    limit=2000,
+                    with_payload=True,
+                    with_vectors=False
                 )
+                for pt in scroll_res:
+                    p_load = pt.payload or {}
+                    if p_load.get("filename") == filename:
+                        p_user = p_load.get("user_id", "common")
+                        if user_id and user_id not in ["admin", "common"]:
+                            if p_user not in [user_id, "default_student", "common"]:
+                                continue
+                        point_ids.append(pt.id)
+            except Exception as se:
+                print(f"Scroll warning during delete document: {se}")
 
-            delete_filter = models.Filter(must=filter_conditions)
-            self.client.delete(
-                collection_name=COLLECTION_NAME,
-                points_selector=models.FilterSelector(filter=delete_filter)
-            )
+            # Delete matching points by ID list
+            if point_ids:
+                self.client.delete(
+                    collection_name=COLLECTION_NAME,
+                    points_selector=point_ids
+                )
+            else:
+                # Fallback: try direct filter deletion
+                try:
+                    filter_conditions = [
+                        models.FieldCondition(key="filename", match=models.MatchValue(value=filename))
+                    ]
+                    if user_id and user_id not in ["admin", "common"]:
+                        filter_conditions.append(
+                            models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id))
+                        )
+                    self.client.delete(
+                        collection_name=COLLECTION_NAME,
+                        points_selector=models.FilterSelector(filter=models.Filter(must=filter_conditions))
+                    )
+                except Exception as fe:
+                    print(f"Filter delete warning: {fe}")
 
             # Clean up local raw file if exists
             safe_name = os.path.basename(filename)
@@ -370,6 +407,7 @@ class RAGEngine:
             return {
                 "status": "success",
                 "filename": filename,
+                "deleted_chunks": len(point_ids),
                 "message": f"Successfully deleted {filename} and all its indexed chunks from your vault."
             }
         except Exception as e:
