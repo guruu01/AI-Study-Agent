@@ -109,53 +109,72 @@ class RAGEngine:
         Retrieves top-k relevant study chunks for a query.
         Strictly enforces document privacy: user only receives their own private chunks + common library chunks.
         """
-        query_vector = self.get_embedding(query)
-        
-        filter_conditions = []
-        if user_id:
-            # Allow chunks belonging to this user OR common baseline study library
-            user_filter = models.Filter(
-                should=[
-                    models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id)),
-                    models.FieldCondition(key="user_id", match=models.MatchValue(value="common")),
-                ]
-            )
-            filter_conditions.append(user_filter)
-
-        if topic_filter:
-            filter_conditions.append(
-                models.FieldCondition(
-                    key="topic",
-                    match=models.MatchText(text=topic_filter)
+        try:
+            query_vector = self.get_embedding(query)
+            
+            filter_conditions = []
+            if user_id:
+                # Allow chunks belonging to this user OR common baseline study library
+                user_filter = models.Filter(
+                    should=[
+                        models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id)),
+                        models.FieldCondition(key="user_id", match=models.MatchValue(value="common")),
+                    ]
                 )
-            )
+                filter_conditions.append(user_filter)
 
-        query_filter = models.Filter(must=filter_conditions) if filter_conditions else None
+            if topic_filter:
+                filter_conditions.append(
+                    models.FieldCondition(
+                        key="topic",
+                        match=models.MatchValue(value=topic_filter)
+                    )
+                )
 
-        query_res = self.client.query_points(
-            collection_name=COLLECTION_NAME,
-            query=query_vector,
-            query_filter=query_filter,
-            limit=limit
-        )
+            query_filter = models.Filter(must=filter_conditions) if filter_conditions else None
 
-        results = []
-        for hit in query_res.points:
-            p_user = hit.payload.get("user_id", "common")
-            # Strict safety post-filter: ensure no cross-user leakage
-            if user_id and p_user not in [user_id, "common"]:
-                continue
+            points = []
+            try:
+                query_res = self.client.query_points(
+                    collection_name=COLLECTION_NAME,
+                    query=query_vector,
+                    query_filter=query_filter,
+                    limit=limit
+                )
+                points = getattr(query_res, "points", [])
+            except Exception:
+                try:
+                    points = self.client.search(
+                        collection_name=COLLECTION_NAME,
+                        query_vector=query_vector,
+                        query_filter=query_filter,
+                        limit=limit
+                    )
+                except Exception as e:
+                    print(f"RAG search execution note: {e}")
+                    return []
 
-            results.append({
-                "score": hit.score,
-                "filename": hit.payload.get("filename", ""),
-                "topic": hit.payload.get("topic", ""),
-                "text": hit.payload.get("text", ""),
-                "chunk_id": hit.payload.get("chunk_id", ""),
-                "user_id": p_user,
-                "is_private": (p_user == user_id and user_id != "common")
-            })
-        return results
+            results = []
+            for hit in points:
+                payload = getattr(hit, "payload", None) or {}
+                p_user = payload.get("user_id", "common")
+                # Strict safety post-filter: ensure no cross-user leakage
+                if user_id and p_user not in [user_id, "common"]:
+                    continue
+
+                results.append({
+                    "score": getattr(hit, "score", 0.0),
+                    "filename": payload.get("filename", ""),
+                    "topic": payload.get("topic", ""),
+                    "text": payload.get("text", ""),
+                    "chunk_id": payload.get("chunk_id", ""),
+                    "user_id": p_user,
+                    "is_private": (p_user == user_id and user_id != "common")
+                })
+            return results
+        except Exception as e:
+            print(f"RAG search error: {e}")
+            return []
 
     def get_all_topics(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """

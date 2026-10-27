@@ -677,25 +677,26 @@ class StudyAgent:
         quiz_data = None
 
         if has_llm:
-            # 1. Retrieve grounded study chunks scoped strictly to user's private vault
-            chunks = self.rag.search(query=f"Core concepts, definitions, and rules about {topic}", user_id=user_id, topic_filter=topic, limit=3)
-            context_text = "\n\n".join([f"--- Source: {c['filename']} (Topic: {c['topic']}) ---\n{c['text']}" for c in chunks])
+            try:
+                # 1. Retrieve grounded study chunks scoped strictly to user's private vault
+                chunks = self.rag.search(query=f"Core concepts, definitions, and rules about {topic}", user_id=user_id, topic_filter=topic, limit=3)
+                context_text = "\n\n".join([f"--- Source: {c['filename']} (Topic: {c['topic']}) ---\n{c['text']}" for c in chunks])
 
-            if not context_text.strip():
-                context_text = f"Study Topic: {topic}. Essential concepts and principles."
+                if not context_text.strip():
+                    context_text = f"Study Topic: {topic}. Essential concepts and principles."
 
-            # Dynamic question angles
-            angles = [
-                "core definitions and specific purpose",
-                "practical real-world team trade-offs and decision making",
-                "roles, responsibilities, and authority boundaries",
-                "common misconceptions, anti-patterns, and pitfalls to avoid",
-                "comparing this concept with its alternatives or traditional methods"
-            ]
-            focus_angle = random.choice(angles)
-            recent_str = "\n".join([f"- {q}" for q in recent_questions[:8]]) if recent_questions else "None yet."
+                # Dynamic question angles
+                angles = [
+                    "core definitions and specific purpose",
+                    "practical real-world team trade-offs and decision making",
+                    "roles, responsibilities, and authority boundaries",
+                    "common misconceptions, anti-patterns, and pitfalls to avoid",
+                    "comparing this concept with its alternatives or traditional methods"
+                ]
+                focus_angle = random.choice(angles)
+                recent_str = "\n".join([f"- {q}" for q in recent_questions[:8]]) if recent_questions else "None yet."
 
-            prompt = f"""
+                prompt = f"""
 Based ONLY on the following study materials retrieved from the user's uploaded documents:
 =============================
 {context_text}
@@ -730,16 +731,15 @@ Respond in STRICT JSON format with this exact schema:
   "grounding_source": "Filename and section reference"
 }}
 """
-            response_text = self._call_gemini(prompt, temperature=0.7)
-            try:
+                response_text = self._call_gemini(prompt, temperature=0.7)
                 match = re.search(r'\{.*\}', response_text, re.DOTALL)
                 parsed = json.loads(match.group(0)) if match else json.loads(response_text)
                 if parsed.get("question") and parsed.get("options") and len(parsed.get("options", {})) == 4:
                     # Verify question is not a repeat
                     if parsed.get("question", "").strip() not in recent_questions:
                         quiz_data = parsed
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Quiz LLM generation note: {e}")
 
         # If LLM unavailable or generated a repeat/invalid JSON, use the rich question bank
         if not quiz_data:
@@ -749,16 +749,19 @@ Respond in STRICT JSON format with this exact schema:
         quiz_data["quiz_id"] = quiz_id
 
         # Save active quiz in SQLite for Telegram callback validation and anti-repetition tracking
-        self.tracker.save_active_quiz(
-            quiz_id=quiz_id,
-            user_id=user_id,
-            topic=quiz_data.get("topic", topic),
-            question=quiz_data.get("question", ""),
-            options_json=json.dumps(quiz_data.get("options", {})),
-            correct_option=quiz_data.get("correct_option", "A"),
-            explanation=quiz_data.get("explanation", ""),
-            source_citation=quiz_data.get("grounding_source", "")
-        )
+        try:
+            self.tracker.save_active_quiz(
+                quiz_id=quiz_id,
+                user_id=user_id,
+                topic=quiz_data.get("topic", topic or "Core Concept"),
+                question=quiz_data.get("question", ""),
+                options_json=json.dumps(quiz_data.get("options", {})),
+                correct_option=quiz_data.get("correct_option", "A"),
+                explanation=quiz_data.get("explanation", ""),
+                source_citation=quiz_data.get("grounding_source", "")
+            )
+        except Exception as e:
+            print(f"Active quiz save note: {e}")
 
         return quiz_data
 

@@ -741,6 +741,9 @@ async function loadNewQuiz() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id: uid, topic: chosenTopic || null })
         });
+        if (!res.ok) {
+            throw new Error(`Server returned ${res.status}`);
+        }
         const quiz = await res.json();
         if (!quiz || !quiz.question) {
             throw new Error("Invalid quiz data received");
@@ -749,7 +752,14 @@ async function loadNewQuiz() {
         renderQuiz(quiz);
     } catch (e) {
         console.error("Quiz load error:", e);
-        if (questionStem) questionStem.innerText = "Error loading question. Please check backend connection.";
+        if (questionStem) {
+            questionStem.innerHTML = `
+                <div style="text-align: center; padding: 12px;">
+                    <div style="margin-bottom: 8px; color: var(--text-secondary);">Connecting to study quiz engine...</div>
+                    <button class="btn btn-primary" onclick="loadNewQuiz()" style="font-size: 0.9rem; padding: 6px 14px;">🔄 Load Question</button>
+                </div>
+            `;
+        }
     }
 }
 
