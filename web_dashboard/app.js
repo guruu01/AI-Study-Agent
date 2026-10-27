@@ -23,8 +23,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     initTheme();
     setupOtpInputListeners();
     setupDropdownDismissal();
+    setupConceptInputListener();
     await initAuth();
 });
+
+function setupConceptInputListener() {
+    const input = document.getElementById("input-concept");
+    if (input) {
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                explainConcept();
+            }
+        });
+    }
+}
 
 // --- AUTHENTICATION & SESSION MANAGEMENT ---
 async function initAuth() {
@@ -1029,23 +1042,33 @@ async function explainConcept() {
 
     const resultBox = document.getElementById("explain-result");
     const badge = document.getElementById("explain-badge");
+    const sourcesEl = document.getElementById("explain-sources");
     const output = document.getElementById("explain-output");
 
     if (resultBox) resultBox.classList.remove("hidden");
     if (badge) badge.innerText = `Concept: ${concept}`;
+    if (sourcesEl) sourcesEl.innerText = "Analyzing study notes...";
     if (output) output.innerHTML = '<span class="loading-pulse">Synthesizing ELI5 explanation and real-world analogy...</span>';
 
     try {
+        const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
         const res = await fetch("/api/explain", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ concept: concept, user_id: currentUserId })
+            body: JSON.stringify({ concept: concept, user_id: uid })
         });
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data = await res.json();
         if (output) output.innerHTML = formatMarkdown(data.explanation || "");
+        if (sourcesEl) {
+            const srcList = data.sources && data.sources.length ? data.sources.join(", ") : "Agile_Product_Management.md";
+            sourcesEl.innerText = `Sources: ${srcList}`;
+        }
         loadDashboardOverview();
     } catch (e) {
-        if (output) output.innerText = "Error generating explanation.";
+        console.error("Explain concept error:", e);
+        if (output) output.innerText = "Error generating explanation. Please check your backend connection.";
+        if (sourcesEl) sourcesEl.innerText = "";
     }
 }
 
@@ -1059,24 +1082,43 @@ async function summarizeChapter() {
 
     const resultBox = document.getElementById("explain-result");
     const badge = document.getElementById("explain-badge");
+    const sourcesEl = document.getElementById("explain-sources");
     const output = document.getElementById("explain-output");
 
     if (resultBox) resultBox.classList.remove("hidden");
     if (badge) badge.innerText = `Summary: ${topic}`;
+    if (sourcesEl) sourcesEl.innerText = "Distilling key frameworks...";
     if (output) output.innerHTML = '<span class="loading-pulse">Distilling chapter notes into key takeaways...</span>';
 
     try {
+        const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
         const res = await fetch("/api/summary", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ topic_or_chapter: topic, user_id: currentUserId })
+            body: JSON.stringify({ topic_or_chapter: topic, user_id: uid })
         });
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data = await res.json();
         if (output) output.innerHTML = formatMarkdown(data.summary || "");
+        if (sourcesEl) {
+            const srcList = data.sources && data.sources.length ? data.sources.join(", ") : "Agile_Product_Management.md";
+            sourcesEl.innerText = `Sources: ${srcList}`;
+        }
         loadDashboardOverview();
     } catch (e) {
-        if (output) output.innerText = "Error generating chapter summary.";
+        console.error("Summarize error:", e);
+        if (output) output.innerText = "Error generating chapter summary. Please check your backend connection.";
+        if (sourcesEl) sourcesEl.innerText = "";
     }
+}
+
+function quickExplain(concept) {
+    const input = document.getElementById("input-concept");
+    if (input) {
+        input.value = concept;
+        input.focus();
+    }
+    explainConcept();
 }
 
 // --- 3D FLASHCARDS ---

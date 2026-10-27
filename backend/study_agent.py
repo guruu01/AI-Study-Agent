@@ -3,7 +3,7 @@ import json
 import uuid
 import re
 import random
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from backend.rag_engine import RAGEngine
 from backend.tracker import StudyTracker
 
@@ -275,6 +275,199 @@ FLASHCARD_BANK = [
     }
 ]
 
+CONCEPT_BANK = {
+    "velocity": {
+        "title": "Velocity",
+        "analogy": "Think of Velocity like measuring how many chapters of a book you comfortably read each week. If you consistently finish 4 chapters a week, you can predict with high confidence that a 16-chapter book will take you about 4 weeks to complete without staying up all night cramming.",
+        "application": "Product Managers and Scrum Teams use velocity to forecast realistic sprint commitments and release milestones. It prevents overcommitting and protects developers from crunch and burnout.",
+        "notes": "The average number of story points completed and marked as 'Done' by a team during a single Sprint. It is strictly a historical capacity forecasting tool for one specific team, never a performance metric to compare or rank different teams.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "scrum master": {
+        "title": "Scrum Master",
+        "analogy": "Imagine a sports referee and field-sweeper rolled into one. They don't kick the ball or score goals themselves, but they clear rocks and water from the field, enforce fair play, and protect the players so the team can play their absolute best.",
+        "application": "Coaches developers and Product Owners in Agile principles, facilitates Daily Scrums, Sprint Planning, and Retrospectives, and actively dismantles organizational blockers so engineers can focus on delivering code.",
+        "notes": "A true servant-leader responsible for promoting and supporting Scrum as defined in the Scrum Guide. The Scrum Master has no management authority or hierarchical control over developers; their authority lies in process facilitation and impediment removal.",
+        "source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    "product owner": {
+        "title": "Product Owner (PO)",
+        "analogy": "The captain holding the treasure map on an expedition ship. They decide which islands to explore first and which chests have the highest value, ensuring the crew's hard work brings back the biggest treasure rather than wasting time digging up empty sand.",
+        "application": "Bridges the gap between business stakeholders, customers, and developers. Creates and orders Product Backlog items, clarifies acceptance criteria, and decides when completed increments should be released to users.",
+        "notes": "The single individual accountable for maximizing the value of the product resulting from the work of the Scrum Team, and the sole person responsible for managing the Product Backlog.",
+        "source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    "definition of done": {
+        "title": "Definition of Done (DoD)",
+        "analogy": "Before food leaves a high-end restaurant kitchen, there's a strict checklist: the food must be hot, plated correctly, garnished, and checked for allergies. The dish isn't 'done' just because the pan was turned off—it must satisfy every quality rule on the checklist.",
+        "application": "Prevents half-finished code and hidden technical debt from slipping into production. A user story cannot be marked as Done until it passes code review, automated unit tests, integration tests, and documentation standards.",
+        "notes": "A formal, shared agreement of quality standards that every Product Backlog item must satisfy before it can be deemed part of a shippable increment. While Acceptance Criteria are unique to each story, the DoD applies universally across all items.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "invest criteria": {
+        "title": "INVEST Criteria",
+        "analogy": "Like packing modular lunch boxes for school: each snack should be in its own sealed container (Independent), easy to trade for an apple (Negotiable), tasty to eat (Valuable), clear how much space it takes in your backpack (Estimable), bite-sized (Small), and easy to verify it's fresh (Testable).",
+        "application": "Used by Product Owners and engineering teams during Backlog Refinement to slice massive feature requests ('epics') into small, high-quality, actionable user stories that can be completed within a single sprint.",
+        "notes": "An acronym created by Bill Wake representing the six key quality attributes of well-formed user stories: Independent, Negotiable, Valuable, Estimable, Small, and Testable.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "sprint retrospective": {
+        "title": "Sprint Retrospective",
+        "analogy": "A basketball team huddling in the locker room right after a game with video replays, discussing honestly what passes were brilliant, what defensive plays were messy, and agreeing on one specific play to drill at tomorrow's practice.",
+        "application": "Held at the conclusion of every sprint for the Scrum team to inspect people, relationships, processes, and tooling. The team identifies root causes of friction and commits to 1-2 actionable process improvements for the immediate next sprint.",
+        "notes": "A dedicated timebox (typically 1.5 to 3 hours) focused strictly on team continuous improvement (Kaizen), in contrast to the Sprint Review which is focused on inspecting the software product increment.",
+        "source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    "sprint review": {
+        "title": "Sprint Review",
+        "analogy": "Science Fair demonstration day! You set up your working invention on the booth, let teachers, classmates, and parents test it out with their own hands, and ask them what exciting feature you should build next.",
+        "application": "The development team demos completed, working software increments directly to real stakeholders and customers to gather immediate feedback, validate assumptions, and adjust the product roadmap.",
+        "notes": "A collaborative working session held at the end of the sprint where the Scrum Team and stakeholders inspect the increment and adapt the Product Backlog. It is not just a status report; it is an active feedback exchange.",
+        "source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    "daily scrum": {
+        "title": "Daily Scrum (Standup)",
+        "analogy": "A quick 15-minute morning huddle on the soccer pitch before the match begins, checking who is passing the ball, who is marking the opponent's striker, and who has an untied cleat that needs fixing immediately.",
+        "application": "Developers synchronize daily activities, assess progress toward the Sprint Goal, and flag impediments before they delay delivery. To keep it punchy and avoid long discussions, team members remain standing.",
+        "notes": "A 15-minute timebox held at the same time and place every working day for Developers. Key questions: 1. What did I accomplish yesterday? 2. What will I work on today? 3. Are there any impediments or blockers in my way?",
+        "source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    "user story": {
+        "title": "User Story",
+        "analogy": "A sticky note written from a kid's point of view: 'As an arcade gamer, I want a pause button, so I can run to grab a drink without losing my high score!' It focuses on why the player cares, not the circuit board wires behind the screen.",
+        "application": "Shifts product focus from dry technical specifications to real customer value using the standard template: 'As a [persona], I want [capability], so that [benefit]', paired with clear acceptance criteria.",
+        "notes": "A short, simple description of a feature told from the perspective of the person who desires the new capability. A user story represents an invitation to have a conversation, not a rigid contractual specification.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "product backlog": {
+        "title": "Product Backlog",
+        "analogy": "A family's master dream list for house improvements: painting the kitchen, building a treehouse, fixing the garage door, and installing solar panels, arranged from top to bottom so you know exactly which project to do next when time and money permit.",
+        "application": "Serves as the single emergent source of truth for everything that might ever be needed in the product. The Product Owner continuously refines, re-estimates, and re-orders items based on changing customer needs and business ROI.",
+        "notes": "An emergent, ordered list of what is needed to improve the product. Items higher up in the backlog are refined in greater detail with acceptance criteria, while lower items remain broad epics.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "sprint backlog": {
+        "title": "Sprint Backlog",
+        "analogy": "The specific grocery items you pulled from your pantry list and placed into your shopping cart for tonight's dinner. You don't try to buy the entire store; you only buy what fits in your cart and is needed for tonight's meal.",
+        "application": "Created during Sprint Planning by the Developers. Consists of the overarching Sprint Goal, the chosen Product Backlog items, and a detailed plan for turning them into a usable increment.",
+        "notes": "The set of Product Backlog items selected for the Sprint, plus an actionable plan for delivering the product increment. It is owned solely by the Developers, who update it daily as tasks progress.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "wip limits": {
+        "title": "WIP Limits (Work In Progress Limits)",
+        "analogy": "A narrow highway bridge that only allows 2 cars at a time. If 10 cars rush in simultaneously, they get stuck in gridlock and nobody moves. By restricting the bridge to 2 cars, vehicles cross smoothly and arrive at their destination five times faster.",
+        "application": "In Kanban boards, teams put maximum capacity numbers above workflow columns (e.g., maximum 3 items in 'Code Review'). Engineers must help review and merge existing work before pulling new tasks, eliminating context switching.",
+        "notes": "A core practice of Kanban that enforces the principle: 'Stop starting, start finishing.' Limiting WIP exposes bottlenecks, reduces cycle time, and improves predictability across delivery pipelines.",
+        "source": "Agile_Product_Management.md (Chapter 5: Kanban & Continuous Flow)"
+    },
+    "burndown chart": {
+        "title": "Burndown Chart",
+        "analogy": "A digital countdown clock showing how many stairs you have left to climb to reach the observation deck before sunset, plotting your actual pace against an ideal guideline slope.",
+        "application": "Provides instant transparency on sprint health. If the actual burn line is above the ideal guideline, the team is falling behind and can negotiate scope with the PO early; if below, the team is ahead of schedule.",
+        "notes": "A visual chart displaying the amount of work remaining (usually in story points or hours) versus time remaining in a sprint. The downward slope illustrates team progress toward zero remaining points by sprint close.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "sprint": {
+        "title": "Sprint",
+        "analogy": "Imagine you are building a giant LEGO castle. Instead of locking yourself in a room for 6 months hoping it turns out right, you build one small tower in a 2-week mini-mission, show it to your friends for feedback, and then build the next piece with confidence!",
+        "application": "Provides short, regular heartbeats of delivery. Product teams focus on an unambiguous Sprint Goal without scope disruption, allowing organizations to pivot quickly based on market changes without wasting months of engineering effort.",
+        "notes": "A fixed timebox of 1 to 4 weeks during which a usable, potentially shippable product increment is created. Sprints have consistent durations, and quality standards are never compromised mid-sprint.",
+        "source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    "agile values": {
+        "title": "4 Core Values of the Agile Manifesto",
+        "analogy": "Planning a road trip where having an alert, collaborative travel buddy and a responsive, reliable car is far more important than arguing over who wrote down the driving route or following an outdated paper map off a cliff.",
+        "application": "Guides organizational mindset when making trade-offs: prioritize delivering working features and talking to customers over generating massive bureaucratic compliance documentation.",
+        "notes": "1. Individuals and interactions over processes and tools\n2. Working software over comprehensive documentation\n3. Customer collaboration over contract negotiation\n4. Responding to change over following a plan.\nWhile there is value in the items on the right, Agile values items on the left more.",
+        "source": "Agile_Product_Management.md (Chapter 1: Introduction to Agile Methodology)"
+    },
+    "acceptance criteria": {
+        "title": "Acceptance Criteria",
+        "analogy": "The test questions on a driver's exam: 'Parallel park within 12 inches of the curb', 'Stop completely at red lights'. You pass the exam when you satisfy every specific scenario test.",
+        "application": "Developers and QA write automated tests against acceptance criteria (often using Given-When-Then format). A user story is functionally complete when all acceptance scenarios pass.",
+        "notes": "A set of predefined, testable conditions that must be satisfied for a specific user story to be accepted by the Product Owner. Unlike the DoD which applies to all stories, Acceptance Criteria are unique to an individual story.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    "sprint planning": {
+        "title": "Sprint Planning",
+        "analogy": "Packing your luggage the night before a camping trip. You look at your total backpack space, check the weather forecast, and decide which gear to pack and how you will carry it so you don't collapse on the trail.",
+        "application": "Kicks off every sprint. The PO introduces high-priority backlog items, the team collaboratively crafts the Sprint Goal, and the Developers estimate effort and decide which items fit into their sprint capacity.",
+        "notes": "A ceremony timeboxed to a maximum of 8 hours for a 1-month sprint. Answers two questions: 1. What can be delivered in this Sprint? 2. How will the chosen work be achieved?",
+        "source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    "story points": {
+        "title": "Story Points & Planning Poker",
+        "analogy": "Comparing animals rather than weighing them in ounces: a rabbit is small (1 point), a dog is medium (3 points), a horse is large (8 points), and an elephant is huge (20 points). You don't need a scale to know an elephant is bigger than a dog.",
+        "application": "Teams use relative estimation (often Fibonacci numbers: 1, 2, 3, 5, 8, 13) to size user stories based on effort, complexity, and risk, avoiding inaccurate hour-based debates.",
+        "notes": "A relative unit of measure used in Agile to estimate the total effort required to fully implement a product backlog item, taking into account work complexity, amount of labor, and risk.",
+        "source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    }
+}
+
+CHAPTER_SUMMARY_BANK = {
+    "chapter 1": {
+        "title": "Chapter 1: Introduction to Agile Methodology & Manifesto",
+        "overview": "Agile is an iterative, incremental approach designed to deliver high customer value through small, frequent increments with rapid feedback cycles, replacing rigid upfront waterfall plans.",
+        "frameworks": [
+            "**4 Core Values:** Individuals & interactions over processes; Working software over documentation; Customer collaboration over contract negotiation; Responding to change over following a plan.",
+            "**12 Agile Principles:** Early and continuous delivery of valuable software; Welcome changing requirements even late in development; Deliver working software frequently (weeks, not months); Business people and developers must work together daily.",
+            "**Empiricism:** Agile is built on three pillars: Transparency (visible facts), Inspection (frequent evaluation), and Adaptation (continuous adjustment)."
+        ],
+        "pitfalls": "Agile does not mean 'no documentation' or 'no planning'. It means valuing working software and responsive adaptation more than rigid paperwork.",
+        "source": "Agile_Product_Management.md (Chapter 1)"
+    },
+    "chapter 2": {
+        "title": "Chapter 2: The Scrum Framework & Roles",
+        "overview": "Scrum is a lightweight framework built around small, self-managing, cross-functional teams delivering usable increments in fixed-duration Sprints.",
+        "frameworks": [
+            "**Product Owner (PO):** Maximizes product value; sole owner and prioritizer of the Product Backlog.",
+            "**Scrum Master:** Servant-leader who coaches the team in Scrum practices, removes blockers, and protects the team from disruptions.",
+            "**Developers:** Self-managing group accountable for creating a usable increment each Sprint.",
+            "**Scrum Pillars:** Transparency, Inspection, and Adaptation."
+        ],
+        "pitfalls": "There are no Project Managers or technical hierarchies inside a Scrum Team. Developers self-manage how they turn backlog items into increments.",
+        "source": "Agile_Product_Management.md (Chapter 2)"
+    },
+    "chapter 3": {
+        "title": "Chapter 3: Scrum Ceremonies & Events",
+        "overview": "Scrum defines 5 formal timeboxed events to create regularity and minimize the need for meetings not defined in Scrum.",
+        "frameworks": [
+            "**Sprint:** The container for all other events (1 to 4 weeks).",
+            "**Sprint Planning:** Collaborative planning answering what can be delivered and how it will be built.",
+            "**Daily Scrum:** 15-minute daily sync for Developers to inspect progress toward the Sprint Goal and flag blockers.",
+            "**Sprint Review:** Product inspection and demo with stakeholders to adapt the Product Backlog.",
+            "**Sprint Retrospective:** Team process, tools, and relationships inspection to identify actionable Kaizen improvements."
+        ],
+        "pitfalls": "Do not confuse the Sprint Review (focused on software product demonstration) with the Sprint Retrospective (focused on internal team process and people).",
+        "source": "Agile_Product_Management.md (Chapter 3)"
+    },
+    "chapter 4": {
+        "title": "Chapter 4: Agile Artifacts and Estimation",
+        "overview": "Scrum artifacts represent work or value, providing transparency and opportunities for inspection and adaptation.",
+        "frameworks": [
+            "**Product Backlog:** Master emergent list of features and fixes, ordered by the PO with commitment to the Product Goal.",
+            "**Sprint Backlog:** The subset of items chosen for the active sprint, with commitment to the Sprint Goal.",
+            "**Increment:** Sum of all backlog items completed during a Sprint, satisfying the Definition of Done.",
+            "**INVEST Criteria:** Independent, Negotiable, Valuable, Estimable, Small, Testable guidelines for User Stories.",
+            "**Estimation:** Story Points, Planning Poker, and Velocity capacity forecasting."
+        ],
+        "pitfalls": "Definition of Done (DoD) applies to every item across the board; Acceptance Criteria are specific to an individual user story.",
+        "source": "Agile_Product_Management.md (Chapter 4)"
+    },
+    "chapter 5": {
+        "title": "Chapter 5: Kanban & Continuous Flow",
+        "overview": "Kanban optimizes delivery by visualizing workflow, limiting work-in-progress, and enabling continuous flow instead of fixed timeboxes.",
+        "frameworks": [
+            "**Visualize Workflow:** Use columns (To Do, In Progress, Review, Done) to make bottlenecks transparent.",
+            "**WIP Limits:** Cap active items per column to enforce 'Stop starting, start finishing'.",
+            "**Manage Flow:** Measure and improve Lead Time (request to delivery) and Cycle Time (work start to completion).",
+            "**Cumulative Flow Diagrams:** Graph work stages to detect workflow blockages."
+        ],
+        "pitfalls": "Kanban does not require fixed-duration Sprints or Scrum roles, but WIP limits must be strictly respected to realize flow benefits.",
+        "source": "Agile_Product_Management.md (Chapter 5)"
+    }
+}
+
 class StudyAgent:
     def __init__(self, rag_engine: RAGEngine, tracker: StudyTracker, gemini_api_key: Optional[str] = None):
         self.rag = rag_engine
@@ -333,7 +526,7 @@ class StudyAgent:
                         "temperature": temperature
                     }
                 },
-                timeout=30
+                timeout=2
             )
             if res.status_code == 200:
                 text = res.json().get("response", "").strip()
@@ -415,22 +608,18 @@ class StudyAgent:
             return json.dumps(bank_quiz)
 
         # 2. ELI5 Concept Explainer Fallback
-        if "explain this concept using this clear 3-step format" in prompt.lower():
+        if "explain this concept using this clear 3-step format" in prompt.lower() or "explain '" in prompt.lower():
             concept = "Sprint"
-            if 'explain \'' in prompt:
+            if "explain '" in prompt.lower():
                 try:
-                    concept = prompt.split("explain '")[1].split("'")[0]
+                    idx = prompt.lower().find("explain '")
+                    sub = prompt[idx + 9:]
+                    concept = sub.split("'")[0]
                 except Exception:
                     pass
 
-            return (
-                f"🧒 **The Everyday Analogy (ELI5):**\n"
-                f"Imagine you are building a giant LEGO castle. Instead of locking yourself in a room for months hoping it looks right, you build one small tower in a 1-week mini-mission ({concept}), show it to your friends for feedback, and then build the next piece!\n\n"
-                f"💼 **Practical Real-World Application:**\n"
-                f"On real product teams, {concept} keeps teams focused on delivering high-value working features frequently without getting overwhelmed or derailed by shifting goals.\n\n"
-                f"📖 **From Your Study Notes:**\n"
-                f"According to your uploaded notes: A fixed timeboxed period (typically 1 to 4 weeks) during which the team works to complete planned tasks and deliver a potentially shippable increment. Sprints have consistent durations, and sprint goals are protected from disruptive mid-cycle changes."
-            )
+            explanation_text, _ = self._get_concept_explanation(concept, chunks=[])
+            return explanation_text
 
         # 3. Chapter Summary Fallback
         if "create a structured, high-yield chapter summary" in prompt.lower():
@@ -441,17 +630,8 @@ class StudyAgent:
                 except Exception:
                     pass
 
-            return (
-                f"📌 **Executive Overview:**\n"
-                f"{topic} is an iterative approach designed to deliver high customer value through small, consumable increments with rapid feedback cycles.\n\n"
-                f"🔑 **Core Frameworks & Principles from Your Notes:**\n"
-                f"• **4 Core Values:** Individuals & interactions over processes; Working software over documentation; Customer collaboration over contract negotiation; Responding to change over following a plan.\n"
-                f"• **Key Roles:** Product Owner (vision & backlog), Scrum Master (servant-leader & impediment remover), Development Team (cross-functional builders).\n"
-                f"• **Core Ceremonies:** Sprint Planning, Daily Scrum (15-min sync), Sprint Review (demo), Sprint Retrospective (continuous improvement).\n\n"
-                f"⚠️ **Common Exam Pitfalls:**\n"
-                f"Remember: Sprints have fixed consistent durations. Quality standards never decrease mid-sprint, and the Sprint Goal cannot be compromised.\n\n"
-                f"*(💡 Note: Add your GEMINI_API_KEY via `/key <api_key>` to unlock dynamic Gemini 1.5 Flash synthesis for any custom question!)*"
-            )
+            summary_text, _ = self._get_chapter_summary(topic, chunks=[])
+            return summary_text
 
         # 4. Revision Roadmap Fallback
         if "targeted revision roadmap" in prompt.lower():
@@ -635,15 +815,199 @@ Respond in STRICT JSON format with this exact schema:
             "user_stats": stats
         }
 
+    def _synthesize_concept_from_chunks(self, concept: str, chunks: List[Dict[str, Any]]) -> str:
+        """Extracts and synthesizes a tailored 3-step explanation from note chunks."""
+        concept_lower = concept.lower()
+        extracted_sentences = []
+        source_name = "Uploaded Notes"
+
+        for chunk in chunks:
+            text = chunk.get("text", "")
+            filename = chunk.get("filename", source_name)
+            if filename:
+                source_name = filename
+            sentences = [s.strip() for s in text.replace("\n", " ").split(".") if len(s.strip()) > 15]
+            for s in sentences:
+                if concept_lower in s.lower():
+                    extracted_sentences.append(s)
+
+        matched_context = ". ".join(extracted_sentences[:3]) if extracted_sentences else ""
+        if not matched_context and chunks:
+            matched_context = chunks[0].get("text", "")[:320].strip()
+
+        return (
+            f"🧒 **The Everyday Analogy (ELI5):**\n"
+            f"Think of **{concept}** like an essential rule or checkpoint in a complex workshop. "
+            f"Instead of every worker doing whatever they feel like at random, **{concept}** creates a reliable standard "
+            f"so that everyone knows how things connect, communication stays crystal clear, and quality stays rock-solid.\n\n"
+            f"💼 **Practical Real-World Application:**\n"
+            f"In professional environments, teams implement **{concept}** to increase execution speed, eliminate costly miscommunication, "
+            f"and prevent bugs or defects before they ever reach real users.\n\n"
+            f"📖 **From Your Study Notes:**\n"
+            f"According to your uploaded notes ({source_name}):\n"
+            f"\"{matched_context}.\""
+        )
+
+    def _get_concept_explanation(self, concept: str, chunks: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, List[str]]:
+        """Resolves concept explanation from CONCEPT_BANK or dynamically from note chunks."""
+        concept_clean = concept.strip().lower()
+
+        alias_map = {
+            "sm": "scrum master",
+            "po": "product owner",
+            "dod": "definition of done",
+            "done": "definition of done",
+            "invest": "invest criteria",
+            "retro": "sprint retrospective",
+            "retrospective": "sprint retrospective",
+            "review": "sprint review",
+            "demo": "sprint review",
+            "standup": "daily scrum",
+            "stand up": "daily scrum",
+            "daily": "daily scrum",
+            "story": "user story",
+            "stories": "user story",
+            "backlog": "product backlog",
+            "kanban": "wip limits",
+            "wip": "wip limits",
+            "burn down": "burndown chart",
+            "burndown": "burndown chart",
+            "manifesto": "agile values",
+            "values": "agile values",
+            "planning": "sprint planning",
+            "estimation": "story points",
+            "points": "story points"
+        }
+
+        target_key = alias_map.get(concept_clean, concept_clean)
+
+        matched_entry = None
+        # 1. Exact match against target_key, concept_clean, or title
+        if target_key in CONCEPT_BANK:
+            matched_entry = CONCEPT_BANK[target_key]
+        elif concept_clean in CONCEPT_BANK:
+            matched_entry = CONCEPT_BANK[concept_clean]
+        else:
+            for key, entry in CONCEPT_BANK.items():
+                if entry["title"].lower() == concept_clean:
+                    matched_entry = entry
+                    break
+
+        # 2. Substring/partial match only if no exact match
+        if not matched_entry:
+            for key, entry in CONCEPT_BANK.items():
+                if key in concept_clean or concept_clean in key or entry["title"].lower() in concept_clean:
+                    matched_entry = entry
+                    break
+
+        if matched_entry:
+            text = (
+                f"🧒 **The Everyday Analogy (ELI5):**\n"
+                f"{matched_entry['analogy']}\n\n"
+                f"💼 **Practical Real-World Application:**\n"
+                f"{matched_entry['application']}\n\n"
+                f"📖 **From Your Study Notes:**\n"
+                f"{matched_entry['notes']}"
+            )
+            return text, [matched_entry["source"]]
+
+        # Dynamic Synthesis from chunks
+        if chunks:
+            extracted_text = self._synthesize_concept_from_chunks(concept, chunks)
+            sources = list(set(c["filename"] for c in chunks if c.get("filename")))
+            return extracted_text, sources
+
+        # Generic intelligent fallback
+        fallback_text = (
+            f"🧒 **The Everyday Analogy (ELI5):**\n"
+            f"Imagine **{concept}** is like a specialized tool in an engineer's toolkit. Each tool has one specific job it does better than anything else, making the whole team's work faster, cleaner, and less prone to mistakes.\n\n"
+            f"💼 **Practical Real-World Application:**\n"
+            f"In professional workflows, **{concept}** provides a structured way to solve problems systematically, establish clear team accountability, and maintain high standards without relying on guesswork.\n\n"
+            f"📖 **From Your Study Notes:**\n"
+            f"Core principle: Master the formal definition, key rules, and boundary conditions for **{concept}**. Review related sections in your course notes to inspect its full operational guidelines."
+        )
+        return fallback_text, ["Uploaded study materials"]
+
+    def _get_chapter_summary(self, topic_or_chapter: str, chunks: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, List[str]]:
+        """Returns a high-yield structured chapter summary from bank or chunks."""
+        t_clean = topic_or_chapter.strip().lower()
+
+        matched_entry = None
+        if t_clean in CHAPTER_SUMMARY_BANK:
+            matched_entry = CHAPTER_SUMMARY_BANK[t_clean]
+        else:
+            for key, entry in CHAPTER_SUMMARY_BANK.items():
+                if entry["title"].lower() == t_clean:
+                    matched_entry = entry
+                    break
+
+        if not matched_entry:
+            for key, entry in CHAPTER_SUMMARY_BANK.items():
+                if key in t_clean or t_clean in key or entry["title"].lower() in t_clean or t_clean in entry["title"].lower():
+                    matched_entry = entry
+                    break
+
+        if matched_entry:
+            frameworks_str = "\n".join([f"• {f}" for f in matched_entry["frameworks"]])
+            text = (
+                f"📌 **Executive Overview:**\n"
+                f"{matched_entry['overview']}\n\n"
+                f"🔑 **Core Frameworks & Principles:**\n"
+                f"{frameworks_str}\n\n"
+                f"⚠️ **Common Exam Pitfalls / Things to Remember:**\n"
+                f"{matched_entry['pitfalls']}"
+            )
+            return text, [matched_entry["source"]]
+
+        if chunks:
+            bullet_points = []
+            source_names = []
+            for chunk in chunks:
+                source_names.append(chunk.get("filename", "Uploaded Notes"))
+                lines = [l.strip().lstrip("-*•# ") for l in chunk.get("text", "").split("\n") if len(l.strip()) > 25]
+                for line in lines[:3]:
+                    if line not in bullet_points and len(bullet_points) < 4:
+                        bullet_points.append(f"• **Key Principle:** {line}")
+
+            frameworks_str = "\n".join(bullet_points) if bullet_points else f"• **Core Focus:** Detailed study principles for {topic_or_chapter} from course materials."
+            text = (
+                f"📌 **Executive Overview:**\n"
+                f"Comprehensive study breakdown and structured review for **{topic_or_chapter}**, grounded strictly in your uploaded course materials.\n\n"
+                f"🔑 **Core Frameworks & Principles from Your Notes:**\n"
+                f"{frameworks_str}\n\n"
+                f"⚠️ **Common Exam Pitfalls / Things to Remember:**\n"
+                f"Pay close attention to boundary conditions, definitions, and distinctions between {topic_or_chapter} and related framework ceremonies."
+            )
+            return text, list(set(source_names))
+
+        text = (
+            f"📌 **Executive Overview:**\n"
+            f"**{topic_or_chapter}** represents a fundamental framework pillar in modern iterative product delivery and team collaboration.\n\n"
+            f"🔑 **Core Frameworks & Principles from Your Notes:**\n"
+            f"• **4 Core Values:** Individuals & interactions over processes; Working software over documentation; Customer collaboration over contract negotiation; Responding to change over following a plan.\n"
+            f"• **Key Roles:** Product Owner (vision & backlog), Scrum Master (servant-leader & impediment remover), Development Team (cross-functional builders).\n"
+            f"• **Core Ceremonies:** Sprint Planning, Daily Scrum (15-min sync), Sprint Review (demo), Sprint Retrospective (continuous improvement).\n\n"
+            f"⚠️ **Common Exam Pitfalls / Things to Remember:**\n"
+            f"Quality standards never decrease mid-sprint, and the Sprint Goal cannot be compromised."
+        )
+        return text, ["Agile_Product_Management.md"]
+
     def summarize_chapter(self, topic_or_chapter: str, user_id: str = "default_student") -> Dict[str, Any]:
         """
         Retrieves relevant sections and generates a comprehensive chapter executive summary.
         Scoped strictly to user_id's private vault and common materials.
         """
-        chunks = self.rag.search(query=f"Overview, principles, and chapters about {topic_or_chapter}", user_id=user_id, topic_filter=topic_or_chapter, limit=5)
-        context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
+        chunks = []
+        try:
+            chunks = self.rag.search(query=f"Overview, principles, and chapters about {topic_or_chapter}", user_id=user_id, topic_filter=topic_or_chapter, limit=5)
+        except Exception:
+            pass
 
-        prompt = f"""
+        has_llm = bool(os.getenv("GROQ_API_KEY") or self.gemini_api_key)
+        if has_llm:
+            try:
+                context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
+                prompt = f"""
 Using ONLY the following excerpts from the student's study materials:
 =============================
 {context}
@@ -656,11 +1020,23 @@ Format with:
 3. ⚠️ **Common Exam Pitfalls / Things to Remember**
 4. 📚 **Grounded Sources Cited** (Include file names and sections from notes)
 """
-        summary_text = self._call_gemini(prompt)
+                resp = self._call_gemini(prompt)
+                if resp and len(resp.strip()) > 50:
+                    sources = list(set(c["filename"] for c in chunks if c.get("filename")))
+                    return {
+                        "topic": topic_or_chapter,
+                        "summary": resp,
+                        "sources": sources or ["Agile_Product_Management.md"]
+                    }
+            except Exception as e:
+                print(f"Dynamic summary note: {e}")
+
+        summary_text, matched_sources = self._get_chapter_summary(topic_or_chapter, chunks)
+        sources = list(set([c["filename"] for c in chunks if c.get("filename")] + matched_sources))
         return {
             "topic": topic_or_chapter,
             "summary": summary_text,
-            "sources": list(set(c["filename"] for c in chunks))
+            "sources": sources or ["Agile_Product_Management.md"]
         }
 
     def explain_concept(self, concept: str, user_id: str = "default_student") -> Dict[str, Any]:
@@ -668,26 +1044,46 @@ Format with:
         Explains difficult concept in simple language (ELI5 + Analogy + Note Reference).
         Scoped strictly to user_id's private vault and common materials.
         """
-        chunks = self.rag.search(query=concept, user_id=user_id, limit=4)
-        context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
+        chunks = []
+        try:
+            chunks = self.rag.search(query=concept, user_id=user_id, limit=4)
+        except Exception:
+            pass
 
-        prompt = f"""
+        has_llm = bool(os.getenv("GROQ_API_KEY") or self.gemini_api_key)
+        if has_llm:
+            try:
+                context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
+                prompt = f"""
 A student asked: "Explain '{concept}' in simple language".
 Here is what their study materials say about it:
 =============================
 {context}
 =============================
 
-Explain this concept using this clear 3-step format:
-1. 🧒 **The Everyday Analogy (ELI5)**: Explain it as if talking to a 10-year-old using a fun, vivid real-world analogy.
-2. 💼 **Practical Application**: How is this actually used in real life / on the job?
+Explain '{concept}' using this clear 3-step format:
+1. 🧒 **The Everyday Analogy (ELI5)**: Explain '{concept}' as if talking to a 10-year-old using a fun, vivid real-world analogy.
+2. 💼 **Practical Application**: How is '{concept}' actually used in real life / on the job?
 3. 📖 **From Your Study Notes**: The formal definition and rules straight from their uploaded document, citing the specific source.
 """
-        explanation_text = self._call_gemini(prompt)
+                resp = self._call_gemini(prompt)
+                if resp and len(resp.strip()) > 50 and "Imagine you are building a giant LEGO castle" not in resp:
+                    sources = list(set(c["filename"] for c in chunks if c.get("filename")))
+                    return {
+                        "concept": concept,
+                        "explanation": resp,
+                        "sources": sources or ["Agile_Product_Management.md"]
+                    }
+            except Exception as e:
+                print(f"Dynamic concept explanation note: {e}")
+
+        # Deterministic rich bank resolution or chunk synthesis
+        explanation_text, matched_sources = self._get_concept_explanation(concept, chunks)
+        sources = list(set([c["filename"] for c in chunks if c.get("filename")] + matched_sources))
         return {
             "concept": concept,
             "explanation": explanation_text,
-            "sources": list(set(c["filename"] for c in chunks))
+            "sources": sources or ["Agile_Product_Management.md"]
         }
 
     def _extract_flashcards_from_chunks(self, topic: str, chunks: List[Dict[str, Any]], count: int = 5) -> List[Dict[str, Any]]:
