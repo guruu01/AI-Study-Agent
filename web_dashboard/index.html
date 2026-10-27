@@ -345,15 +345,15 @@
             <section class="tab-content" id="tab-vault">
                 <div class="grid-2-col">
                     <div class="card upload-card">
-                        <h2 class="card-title">Upload Study Materials</h2>
+                        <h2 class="card-title">Upload Course Materials</h2>
                         <p class="card-subtitle">
-                            Accepts PDF, Word (.docx), PPT (.pptx), Excel (.xlsx), Markdown (.md), Images & Audio Notes.
+                            Accepts PDF, Word (.docx), PPT (.pptx), Excel (.xlsx), Markdown (.md), Images & Audio Notes. Indexed for all students.
                         </p>
 
                         <div class="dropzone" id="dropzone">
                             <div class="drop-icon">📤</div>
-                            <h4>Drop files or whole study folders here</h4>
-                            <p class="drop-hint">Upload individual documents, audio notes, or an entire directory of course materials.</p>
+                            <h4>Drop files or whole course folders here</h4>
+                            <p class="drop-hint">Upload individual documents, lecture recordings, or an entire directory of course materials.</p>
                             <div class="dropzone-actions" style="display: flex; gap: 0.6rem; justify-content: center; margin-top: 0.8rem; z-index: 2; position: relative;">
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('file-input').click()">📄 Upload Files</button>
                                 <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); document.getElementById('folder-input').click()">📁 Upload Folder</button>
@@ -370,11 +370,11 @@
                         </div>
 
                         <div class="text-paste-section">
-                            <h4>Or Paste Raw Study Notes</h4>
+                            <h4>Or Paste Raw Course Notes</h4>
                             <input type="text" id="paste-title" class="input-text" placeholder="Note Title (e.g., Sprint Planning Notes)">
                             <textarea id="paste-content" class="textarea-input" rows="4" placeholder="Paste chapter notes, lecture takeaways, or markdown here..."></textarea>
                             <button class="btn btn-secondary" id="btn-paste-ingest" onclick="handleTextIngest()">
-                                📥 Ingest Raw Notes
+                                📥 Ingest into Course Library
                             </button>
                         </div>
                     </div>
@@ -382,10 +382,10 @@
                     <div class="card vault-list-card">
                         <div class="card-header" style="margin-bottom: 0.8rem;">
                             <div>
-                                <h2 class="card-title">Knowledge Vault</h2>
-                                <p class="card-subtitle">Your private documents & shared foundational library.</p>
+                                <h2 class="card-title">Shared Course Library</h2>
+                                <p class="card-subtitle">Universal course library accessible to all students.</p>
                             </div>
-                            <span class="badge" id="vault-privacy-badge">🔒 Private Vault</span>
+                            <span class="badge" id="vault-privacy-badge">🌐 Shared Course Library</span>
                         </div>
 
                         <div class="vault-sections-container">
@@ -668,10 +668,10 @@
             </div>
             <div class="legal-content">
                 <h4>1. Information We Collect</h4>
-                <p>StudyAgent collects your email address, profile preferences, and documents you upload to your private study vault to generate personalized quizzes and study summaries.</p>
+                <p>StudyAgent collects your email address, profile preferences, and quiz session performance to generate personalized practice quizzes and study summaries.</p>
                 
-                <h4>2. Document Isolation & Security</h4>
-                <p>Your uploaded study notes are embedded in isolated vectors scoped strictly to your authenticated user ID. No other user can access, read, or query your private documents.</p>
+                <h4>2. Universal Course Library</h4>
+                <p>Course materials uploaded to the library are indexed for all students in the class or study group, ensuring universal access to quizzes, flashcards, and conceptual summaries.</p>
 
                 <h4>3. Authentication Security</h4>
                 <p>We use official Google OAuth and one-time passwordless email verification codes. Passwords, auth secrets, and credentials are never stored in plain text.</p>

@@ -393,7 +393,7 @@ async function loginAsDemoUser() {
     }
     currentUserId = guestId;
     localStorage.setItem("study_user_id", currentUserId);
-    showToast("Logged in as Guest Student. Your private study vault is active!", "success");
+    showToast("Logged in as Guest Student. Shared Course Library is active!", "success");
     await onUserAuthenticated({ id: currentUserId, email: `${currentUserId}@studyagent.ai` });
 }
 
@@ -467,7 +467,7 @@ async function loadProfile(user) {
 
         // Vault badge
         const privacyBadge = document.getElementById("vault-privacy-badge");
-        if (privacyBadge) privacyBadge.innerText = `🔒 Private Vault: ${firstName}`;
+        if (privacyBadge) privacyBadge.innerText = "🌐 Shared Course Library";
 
         // Populate form if modal opens
         populateProfileForm(profile, user);
@@ -948,8 +948,8 @@ function renderFilteredVaultDocs(docs) {
     }
 
     docList.innerHTML = docs.map(d => {
-        const privacyIcon = d.is_private ? "🔒" : "🌐";
-        const privacyLabel = d.is_private ? `Private to ${currentUserId}` : "Shared Library";
+        const privacyIcon = "🌐";
+        const privacyLabel = "Shared Library";
         const chunkVal = d.chunk_count != null ? d.chunk_count : (d.chunks != null ? d.chunks : 0);
         const encName = encodeURIComponent(d.filename);
         return `
@@ -963,7 +963,7 @@ function renderFilteredVaultDocs(docs) {
                 </div>
                 <div class="doc-actions">
                     <button class="doc-btn doc-btn-view" onclick="openDocViewer('${encName}')" title="View document content & chunks">👁️ View</button>
-                    <button class="doc-btn doc-btn-delete" onclick="promptDeleteDoc('${encName}')" title="Delete from vault">🗑️ Delete</button>
+                    <button class="doc-btn doc-btn-delete" onclick="promptDeleteDoc('${encName}')" title="Delete from course library">🗑️ Delete</button>
                 </div>
             </div>
         `;
@@ -1008,8 +1008,8 @@ async function openDocViewer(encodedFilename) {
         const doc = await res.json();
         currentViewerDoc = doc;
 
-        const privBadge = doc.is_private ? "🔒 Private" : "🌐 Shared Library";
-        if (viewerMeta) viewerMeta.innerText = `${privBadge} • ${doc.chunk_count} vector chunks • Owner: ${doc.owner || "you"}`;
+        const privBadge = "🌐 Shared Library";
+        if (viewerMeta) viewerMeta.innerText = `${privBadge} • ${doc.chunk_count} vector chunks`;
         if (chunkCountSpan) chunkCountSpan.innerText = doc.chunk_count;
 
         if (topicsContainer && doc.topics) {
@@ -1125,7 +1125,7 @@ async function executeDeleteDocument() {
         const result = await res.json();
         closeModal("modal-confirm-delete");
         closeModal("modal-doc-viewer");
-        showToast(`Deleted ${filename} from your vault.`, "success");
+        showToast(`Deleted ${filename} from the Shared Course Library.`, "success");
 
         await Promise.all([
             loadTopics(),
@@ -1176,7 +1176,7 @@ async function handleFolderUpload(event) {
 
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("user_id", currentUserId || "default_student");
+        formData.append("user_id", "common");
 
         try {
             const res = await fetch("/api/ingest", {
@@ -1311,7 +1311,7 @@ async function handleFileUpload(event) {
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("user_id", currentUserId);
+    formData.append("user_id", "common");
 
     try {
         if (progressBar) progressBar.style.width = "75%";
@@ -1325,7 +1325,7 @@ async function handleFileUpload(event) {
         if (progressBar) progressBar.style.width = "100%";
         if (statusText) statusText.innerText = `Success! Indexed ${indexedCount} chunks.`;
 
-        showToast(`Indexed ${file.name} successfully into your private vault!`, "success");
+        showToast(`Indexed ${file.name} successfully into Shared Course Library!`, "success");
 
         await Promise.all([
             loadTopics(),
@@ -1358,11 +1358,11 @@ async function handleTextIngest() {
         const res = await fetch("/api/ingest/text", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, text, user_id: currentUserId })
+            body: JSON.stringify({ title, text, user_id: "common" })
         });
         const result = await res.json();
         const indexedCount = result.chunks_indexed != null ? result.chunks_indexed : (result.indexed_count != null ? result.indexed_count : 0);
-        showToast(`Notes stored in private vault! Indexed ${indexedCount} chunks.`, "success");
+        showToast(`Notes stored in Shared Course Library! Indexed ${indexedCount} chunks.`, "success");
 
         if (titleInput) titleInput.value = "";
         if (contentInput) contentInput.value = "";

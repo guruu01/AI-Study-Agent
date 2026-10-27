@@ -150,26 +150,26 @@ def set_gemini_key(req: Optional[GeminiKeyRequest] = None, api_key: Optional[str
 
 @app.get("/api/topics")
 def list_topics(user_id: Optional[str] = Query(None)):
-    """Returns topics visible to user_id (private uploads + shared common vault)."""
-    return rag_engine.get_all_topics(user_id=user_id)
+    """Returns all topics across the universal Shared Course Library."""
+    return rag_engine.get_all_topics()
 
 @app.get("/api/vault/documents")
 def list_vault_documents(user_id: Optional[str] = Query(None)):
-    """Returns all documents in the user's private vault and shared library."""
-    return rag_engine.get_user_documents(user_id=user_id)
+    """Returns all documents across the universal Shared Course Library."""
+    return rag_engine.get_user_documents()
 
 @app.get("/api/vault/document")
 def get_vault_document(filename: str = Query(...), user_id: Optional[str] = Query(None)):
-    """Returns detailed content, chunk list, and topics for a specific document."""
-    doc = rag_engine.get_document_content(filename=filename, user_id=user_id)
+    """Returns detailed content, chunk list, and topics for a document in the Shared Course Library."""
+    doc = rag_engine.get_document_content(filename=filename)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found or access denied.")
+        raise HTTPException(status_code=404, detail="Document not found.")
     return doc
 
 @app.delete("/api/vault/document")
-def delete_vault_document(filename: str = Query(...), user_id: str = Query("default_student")):
-    """Deletes a document and all its indexed chunks from the user's vault."""
-    res = rag_engine.delete_document(filename=filename, user_id=user_id)
+def delete_vault_document(filename: str = Query(...), user_id: Optional[str] = Query(None)):
+    """Deletes a document and all its indexed chunks from the Shared Course Library."""
+    res = rag_engine.delete_document(filename=filename)
     if res.get("status") == "error":
         raise HTTPException(status_code=500, detail=res.get("message", "Failed to delete document"))
     return res
@@ -177,11 +177,11 @@ def delete_vault_document(filename: str = Query(...), user_id: str = Query("defa
 @app.post("/api/ingest/batch")
 async def ingest_batch_files(
     files: List[UploadFile] = File(...),
-    user_id: str = Form("default_student")
+    user_id: str = Form("common")
 ):
     """
     Accepts multiple files from folder upload.
-    Ingests each file into user's private vault and returns overall statistics.
+    Ingests each file into the Shared Course Library for universal student access.
     """
     results = []
     total_chunks = 0
@@ -202,7 +202,7 @@ async def ingest_batch_files(
                 continue
 
             chunks = chunk_text(text, filename=safe_filename)
-            indexed_count = rag_engine.index_chunks(chunks, user_id=user_id)
+            indexed_count = rag_engine.index_chunks(chunks, user_id="common")
             total_chunks += indexed_count
             results.append({
                 "filename": safe_filename,
@@ -213,22 +213,22 @@ async def ingest_batch_files(
 
     return {
         "status": "success",
-        "user_id": user_id,
+        "user_id": "common",
         "files_indexed": len(results),
         "total_chunks_indexed": total_chunks,
         "details": results,
         "errors": errors,
-        "message": f"Successfully ingested {len(results)} files ({total_chunks} chunks) into vault for {user_id}!"
+        "message": f"Successfully ingested {len(results)} files ({total_chunks} chunks) into the Shared Course Library!"
     }
 
 @app.post("/api/ingest")
 async def ingest_file(
     file: UploadFile = File(...),
-    user_id: str = Form("default_student")
+    user_id: str = Form("common")
 ):
     """
     Accepts PDFs, .md, .docx, .pptx, Excel, images, audio/video notes.
-    Extracts text, creates chunks, and indexes into Qdrant for RAG scoped to user_id.
+    Extracts text, creates chunks, and indexes into the Shared Course Library for all students.
     """
     safe_filename = Path(file.filename).name
     file_path = os.path.join(UPLOAD_DIR, safe_filename)
@@ -242,18 +242,18 @@ async def ingest_file(
         if not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract readable text from this file.")
 
-        # Chunk text and index scoped to user_id
+        # Chunk text and index into shared course library
         chunks = chunk_text(text, filename=safe_filename)
-        indexed_count = rag_engine.index_chunks(chunks, user_id=user_id)
+        indexed_count = rag_engine.index_chunks(chunks, user_id="common")
 
         detected_topics = list(set(c["topic"] for c in chunks))
         return {
             "status": "success",
             "filename": safe_filename,
-            "user_id": user_id,
+            "user_id": "common",
             "chunks_indexed": indexed_count,
             "detected_topics": detected_topics,
-            "message": f"Successfully ingested {safe_filename} into private vault for {user_id}!"
+            "message": f"Successfully ingested {safe_filename} into the Shared Course Library!"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -261,14 +261,14 @@ async def ingest_file(
 @app.post("/api/ingest/text")
 def ingest_text(req: TextIngestRequest):
     chunks = chunk_text(req.text, filename=f"{req.title}.md")
-    indexed_count = rag_engine.index_chunks(chunks, user_id=req.user_id)
+    indexed_count = rag_engine.index_chunks(chunks, user_id="common")
     return {
         "status": "success",
         "title": req.title,
-        "user_id": req.user_id,
+        "user_id": "common",
         "chunks_indexed": indexed_count,
         "topics": list(set(c["topic"] for c in chunks)),
-        "message": f"Successfully stored notes in private vault for {req.user_id}!"
+        "message": f"Successfully stored notes in the Shared Course Library!"
     }
 
 @app.post("/api/quiz")

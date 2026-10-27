@@ -84,14 +84,15 @@ class RAGEngine:
 
     def index_chunks(self, chunks: List[Dict[str, Any]], user_id: str = "common") -> int:
         """
-        Indexes a list of chunks into Qdrant collection tagged with user_id for vault privacy.
+        Indexes a list of chunks into Qdrant collection for the universal Shared Course Library.
+        All uploaded chunks are universally accessible to all students.
         """
         points = []
         for i, chunk in enumerate(chunks):
             vector = self.get_embedding(chunk["text"])
-            chunk_user = chunk.get("user_id") or user_id or "common"
-            # Deterministic numeric id scoped by user_id to prevent cross-user ID collisions
-            point_id = int(hashlib.md5(f"{chunk_user}:{chunk['chunk_id']}".encode()).hexdigest()[:15], 16)
+            # Always index into universal shared library ("common")
+            chunk_user = "common"
+            point_id = int(hashlib.md5(f"common:{chunk['chunk_id']}".encode()).hexdigest()[:15], 16)
             points.append(models.PointStruct(
                 id=point_id,
                 vector=vector,
@@ -100,7 +101,7 @@ class RAGEngine:
                     "filename": chunk["filename"],
                     "topic": chunk["topic"],
                     "text": chunk["text"],
-                    "user_id": chunk_user
+                    "user_id": "common"
                 }
             ))
 
@@ -116,23 +117,13 @@ class RAGEngine:
 
     def search(self, query: str, user_id: Optional[str] = None, topic_filter: Optional[str] = None, limit: int = 4) -> List[Dict[str, Any]]:
         """
-        Retrieves top-k relevant study chunks for a query.
-        Strictly enforces document privacy: user only receives their own private chunks + common library chunks.
+        Retrieves top-k relevant study chunks for a query from the Shared Course Library.
+        All indexed course materials are universally accessible to all students.
         """
         try:
             query_vector = self.get_embedding(query)
             
             filter_conditions = []
-            if user_id:
-                # Allow chunks belonging to this user OR common baseline study library
-                user_filter = models.Filter(
-                    should=[
-                        models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id)),
-                        models.FieldCondition(key="user_id", match=models.MatchValue(value="common")),
-                    ]
-                )
-                filter_conditions.append(user_filter)
-
             if topic_filter:
                 filter_conditions.append(
                     models.FieldCondition(
@@ -167,19 +158,14 @@ class RAGEngine:
             results = []
             for hit in points:
                 payload = getattr(hit, "payload", None) or {}
-                p_user = payload.get("user_id", "common")
-                # Strict safety post-filter: ensure no cross-user leakage
-                if user_id and p_user not in [user_id, "common"]:
-                    continue
-
                 results.append({
                     "score": getattr(hit, "score", 0.0),
                     "filename": payload.get("filename", ""),
                     "topic": payload.get("topic", ""),
                     "text": payload.get("text", ""),
                     "chunk_id": payload.get("chunk_id", ""),
-                    "user_id": p_user,
-                    "is_private": (p_user == user_id and user_id != "common")
+                    "user_id": "common",
+                    "is_private": False
                 })
             return results
         except Exception as e:
@@ -188,23 +174,18 @@ class RAGEngine:
 
     def get_all_topics(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Scrolls collection to retrieve unique topics and filenames visible to user_id.
-        Private topics belonging to other users are excluded.
+        Scrolls collection to retrieve unique topics and filenames across the Shared Course Library.
+        Universal access: all course topics are visible to every student.
         """
         try:
             scroll_result, _ = self.client.scroll(
                 collection_name=COLLECTION_NAME,
-                limit=500,
+                limit=1000,
                 with_payload=True,
                 with_vectors=False
             )
             topics = {}
             for point in scroll_result:
-                p_user = point.payload.get("user_id", "common")
-                # Privacy filter: only include common materials or materials belonging to this user
-                if user_id and p_user not in [user_id, "common"]:
-                    continue
-
                 top = point.payload.get("topic", "General")
                 fn = point.payload.get("filename", "Unknown")
                 if top not in topics:
@@ -216,18 +197,16 @@ class RAGEngine:
                     }
                 topics[top]["files"].add(fn)
                 topics[top]["chunk_count"] += 1
-                if user_id and p_user == user_id and user_id != "common":
-                    topics[top]["is_private"] = True
 
             return [
                 {
                     "topic": k,
-                    "files": list(v["files"]),
+                    "files": sorted(list(v["files"])),
                     "chunk_count": v["chunk_count"],
                     "count": v["chunk_count"],
-                    "is_private": v["is_private"]
+                    "is_private": False
                 }
-                for k, v in topics.items()
+                for k, v in sorted(topics.items())
             ]
         except Exception as e:
             print(f"Error fetching topics: {e}")
@@ -235,58 +214,8 @@ class RAGEngine:
 
     def get_user_documents(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Retrieves all documents accessible by user_id with privacy status (🔒 Private vs 🌐 Shared).
-        """
-        try:
-            scroll_result, _ = self.client.scroll(
-                collection_name=COLLECTION_NAME,
-                limit=500,
-                with_payload=True,
-                with_vectors=False
-            )
-            docs = {}
-            for point in scroll_result:
-                p_user = point.payload.get("user_id", "common")
-                # Privacy check: skip other users' private uploads
-                if user_id and p_user not in [user_id, "common"]:
-                    continue
-
-                fn = point.payload.get("filename", "Unknown")
-                top = point.payload.get("topic", "General")
-                if fn not in docs:
-                    is_priv = bool(user_id and p_user == user_id and user_id != "common")
-                    docs[fn] = {
-                        "filename": fn,
-                        "topics": set(),
-                        "chunk_count": 0,
-                        "owner": p_user,
-                        "is_private": is_priv
-                    }
-                docs[fn]["topics"].add(top)
-                docs[fn]["chunk_count"] += 1
-                if user_id and p_user == user_id and user_id != "common":
-                    docs[fn]["is_private"] = True
-
-            return [
-                {
-                    "filename": k,
-                    "topics": list(v["topics"]),
-                    "chunk_count": v["chunk_count"],
-                    "chunks": v["chunk_count"],
-                    "owner": v["owner"],
-                    "is_private": v["is_private"],
-                    "can_delete": True,
-                    "privacy_label": "🔒 Private to You" if v["is_private"] else "🌐 Shared Library"
-                }
-                for k, v in docs.items()
-            ]
-        except Exception as e:
-            print(f"Error fetching user documents: {e}")
-            return []
-
-    def get_document_content(self, filename: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """
-        Retrieves all chunks, topics, and consolidated text of a document visible to user_id.
+        Retrieves all documents in the Shared Course Library.
+        Universal access: every student can view and study all course library documents.
         """
         try:
             scroll_result, _ = self.client.scroll(
@@ -295,20 +224,56 @@ class RAGEngine:
                 with_payload=True,
                 with_vectors=False
             )
+            docs = {}
+            for point in scroll_result:
+                fn = point.payload.get("filename", "Unknown")
+                top = point.payload.get("topic", "General")
+                if fn not in docs:
+                    docs[fn] = {
+                        "filename": fn,
+                        "topics": set(),
+                        "chunk_count": 0,
+                        "owner": "Shared Library",
+                        "is_private": False
+                    }
+                docs[fn]["topics"].add(top)
+                docs[fn]["chunk_count"] += 1
+
+            return [
+                {
+                    "filename": k,
+                    "topics": sorted(list(v["topics"])),
+                    "chunk_count": v["chunk_count"],
+                    "chunks": v["chunk_count"],
+                    "owner": "Shared Course Library",
+                    "is_private": False,
+                    "can_delete": True,
+                    "privacy_label": "🌐 Shared Library"
+                }
+                for k, v in sorted(docs.items())
+            ]
+        except Exception as e:
+            print(f"Error fetching user documents: {e}")
+            return []
+
+    def get_document_content(self, filename: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves all chunks, topics, and consolidated text of a document from the Shared Course Library.
+        Universal access: any student can read any course library document.
+        """
+        try:
+            scroll_result, _ = self.client.scroll(
+                collection_name=COLLECTION_NAME,
+                limit=2000,
+                with_payload=True,
+                with_vectors=False
+            )
             chunks = []
             topics = set()
-            owner = "common"
-            is_private = False
 
             for point in scroll_result:
                 payload = getattr(point, "payload", {}) or {}
                 if payload.get("filename") == filename:
-                    p_user = payload.get("user_id", "common")
-                    if user_id and p_user not in [user_id, "common", "default_student"]:
-                        continue
-                    owner = p_user
-                    if user_id and p_user == user_id and user_id != "common":
-                        is_private = True
                     topics.add(payload.get("topic", "General"))
                     chunks.append({
                         "chunk_id": payload.get("chunk_id", str(point.id)),
@@ -337,8 +302,8 @@ class RAGEngine:
                 "topics": sorted(list(topics)),
                 "chunk_count": len(chunks),
                 "chunks": len(chunks),
-                "owner": owner,
-                "is_private": is_private,
+                "owner": "Shared Course Library",
+                "is_private": False,
                 "can_delete": True,
                 "full_text": full_text,
                 "chunk_items": chunks
@@ -349,7 +314,7 @@ class RAGEngine:
 
     def delete_document(self, filename: str, user_id: str = "default_student") -> Dict[str, Any]:
         """
-        Deletes all chunks of a document from Qdrant and removes file from disk.
+        Deletes all chunks of a document from the Shared Course Library in Qdrant and removes file from disk.
         """
         try:
             point_ids = []
@@ -364,10 +329,6 @@ class RAGEngine:
                 for pt in scroll_res:
                     p_load = pt.payload or {}
                     if p_load.get("filename") == filename:
-                        p_user = p_load.get("user_id", "common")
-                        if user_id and user_id not in ["admin", "common"]:
-                            if p_user not in [user_id, "default_student", "common"]:
-                                continue
                         point_ids.append(pt.id)
             except Exception as se:
                 print(f"Scroll warning during delete document: {se}")
@@ -384,10 +345,6 @@ class RAGEngine:
                     filter_conditions = [
                         models.FieldCondition(key="filename", match=models.MatchValue(value=filename))
                     ]
-                    if user_id and user_id not in ["admin", "common"]:
-                        filter_conditions.append(
-                            models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id))
-                        )
                     self.client.delete(
                         collection_name=COLLECTION_NAME,
                         points_selector=models.FilterSelector(filter=models.Filter(must=filter_conditions))
@@ -403,12 +360,18 @@ class RAGEngine:
                     os.remove(raw_path)
                 except Exception:
                     pass
+            upload_path = os.path.join(os.path.dirname(__file__), "..", "uploads", safe_name)
+            if os.path.exists(upload_path):
+                try:
+                    os.remove(upload_path)
+                except Exception:
+                    pass
 
             return {
                 "status": "success",
                 "filename": filename,
                 "deleted_chunks": len(point_ids),
-                "message": f"Successfully deleted {filename} and all its indexed chunks from your vault."
+                "message": f"Successfully deleted {filename} and all its indexed chunks from the Shared Course Library."
             }
         except Exception as e:
             print(f"Error deleting document {filename}: {e}")
