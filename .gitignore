@@ -1,0 +1,34 @@
+# Sensitive Environment & API Keys
+.env
+*.env
+.env.local
+
+# SQLite & Persistent Data
+*.db
+*.sqlite
+*.sqlite3
+study_tracker.db
+backend/study_tracker.db
+
+# Vector Storage & Uploads
+qdrant_data/
+qdrant_storage/
+temp_qdrant/
+uploads/*
+!uploads/.gitkeep
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

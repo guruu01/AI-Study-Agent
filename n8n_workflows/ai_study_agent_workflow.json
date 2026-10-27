@@ -1,0 +1,726 @@
+{
+  "name": "AI Study Agent - Multi-Format RAG & Telegram Quiz",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "id": "e4a7d32a-1111-4444-9999-000000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "study-agent-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.callback_query ? 'callback' : ($json.message?.text?.split(' ')[0] || ($json.message?.document ? 'document' : 'start')) }}",
+                    "rightValue": "callback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Answer Callback"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text?.split(' ')[0] }}",
+                    "rightValue": "/quiz",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Quiz Command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text?.split(' ')[0] }}",
+                    "rightValue": "/score",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Score Command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text?.split(' ')[0] }}",
+                    "rightValue": "/revise",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Revise Command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text?.split(' ')[0] }}",
+                    "rightValue": "/explain",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Explain Command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text?.split(' ')[0] }}",
+                    "rightValue": "/summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Summary Command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text?.split(' ')[0] }}",
+                    "rightValue": "/flashcards",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Flashcards Command"
+            }
+          ]
+        }
+      },
+      "id": "e4a7d32a-2222-4444-9999-000000000002",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/quiz",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.message?.from?.id?.toString() || 'student' }}"
+            },
+            {
+              "name": "topic",
+              "value": "={{ $json.message?.text?.replace('/quiz', '')?.trim() || null }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4a7d32a-3333-4444-9999-000000000003",
+      "name": "Generate Grounded Quiz",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=🎯 *Topic: {{ $json.topic }}*\n\n❓ *Question:* {{ $json.question }}\n\n🅰️ *A.* {{ $json.options.A }}\n\n🅱️ *B.* {{ $json.options.B }}\n\n🅲 *C.* {{ $json.options.C }}\n\n🅳 *D.* {{ $json.options.D }}\n\n_Tap your answer below:_ 👇",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🅰️ Option A",
+                    "additionalFields": {
+                      "callback_data": "=ans:{{ $json.quiz_id }}:A"
+                    }
+                  },
+                  {
+                    "text": "🅱️ Option B",
+                    "additionalFields": {
+                      "callback_data": "=ans:{{ $json.quiz_id }}:B"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🅲 Option C",
+                    "additionalFields": {
+                      "callback_data": "=ans:{{ $json.quiz_id }}:C"
+                    }
+                  },
+                  {
+                    "text": "🅳 Option D",
+                    "additionalFields": {
+                      "callback_data": "=ans:{{ $json.quiz_id }}:D"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "e4a7d32a-4444-4444-9999-000000000004",
+      "name": "Send Telegram Quiz",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        140
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cb = $json.callback_query.data;\nconst parts = cb.split(':');\nreturn {\n  json: {\n    chat_id: $json.callback_query.message.chat.id,\n    user_id: $json.callback_query.from.id.toString(),\n    quiz_id: parts[1],\n    selected_option: parts[2]\n  }\n};"
+      },
+      "id": "e4a7d32a-5555-4444-9999-000000000005",
+      "name": "Parse Answer Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/answer",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "quiz_id",
+              "value": "={{ $json.quiz_id }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "selected_option",
+              "value": "={{ $json.selected_option }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4a7d32a-6666-4444-9999-000000000006",
+      "name": "Evaluate Answer API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Answer Callback').item.json.chat_id }}",
+        "text": "={{ $json.is_correct ? '🎉 *CORRECT!* Well done! ✅' : ('❌ *INCORRECT!* The correct answer is *' + $json.correct_option + '* 📌') }}\n\n💡 *Explanation:*\n{{ $json.explanation }}\n\n📖 *Grounded in Your Notes:*\n_{{ $json.source_citation }}_\n\n───────────────\n📊 *Your Overall Score:* {{ $json.user_stats.accuracy_pct }}% ({{ $json.user_stats.correct_answers }}/{{ $json.user_stats.total_quizzes }} correct)",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Next Question ➡️",
+                    "additionalFields": {
+                      "callback_data": "cmd:quiz"
+                    }
+                  },
+                  {
+                    "text": "Revision Plan 🔍",
+                    "additionalFields": {
+                      "callback_data": "cmd:revise"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "e4a7d32a-7777-4444-9999-000000000007",
+      "name": "Send Answer Feedback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1300,
+        -60
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/api/progress?user_id={{ $json.message.from.id }}",
+        "options": {}
+      },
+      "id": "e4a7d32a-8888-4444-9999-000000000008",
+      "name": "Get Progress API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=📊 *YOUR STUDY SCORECARD*\n\n🎯 *Total Questions:* {{ $json.total_quizzes }}\n✅ *Correct Answers:* {{ $json.correct_answers }}\n📈 *Overall Accuracy:* {{ $json.accuracy_pct }}%\n\n📌 *Topic Breakdown:*\n{{ $json.topic_breakdown.map(t => '• *' + t.topic + ':* ' + t.accuracy + '% (' + t.correct + '/' + t.attempts + ') - ' + t.status).join('\\n') || 'No quizzes completed yet!' }}\n\nUse /quiz to practice or /revise to review weak spots! 🚀",
+        "additionalFields": {}
+      },
+      "id": "e4a7d32a-9999-4444-9999-000000000009",
+      "name": "Send Scoreboard",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        340
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/api/revise?user_id={{ $json.message.from.id }}",
+        "options": {}
+      },
+      "id": "e4a7d32a-aaaa-4444-9999-000000000010",
+      "name": "Get Revision Plan API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=🎯 *TARGETED REVISION ROADMAP*\n\n{{ $json.revision_plan || $json.message }}\n\n───────────────\n_Tips: Review the cited sections in your notes and re-test yourself with /quiz!_",
+        "additionalFields": {}
+      },
+      "id": "e4a7d32a-bbbb-4444-9999-000000000011",
+      "name": "Send Revision Plan",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        520
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/explain",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "concept",
+              "value": "={{ $json.message.text.replace('/explain', '').trim() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4a7d32a-cccc-4444-9999-000000000012",
+      "name": "Explain Concept API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=💡 *EXPLAINING: {{ $json.concept }}*\n\n{{ $json.explanation }}\n\n📚 *Grounded Sources:* {{ $json.sources.join(', ') }}",
+        "additionalFields": {}
+      },
+      "id": "e4a7d32a-dddd-4444-9999-000000000013",
+      "name": "Send Explanation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        700
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/summary",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "topic_or_chapter",
+              "value": "={{ $json.message.text.replace('/summary', '').trim() || 'Agile Methodology' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4a7d32a-eeee-4444-9999-000000000014",
+      "name": "Chapter Summary API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=📖 *CHAPTER SUMMARY: {{ $json.topic }}*\n\n{{ $json.summary }}\n\n📚 *Sources Cited:* {{ $json.sources.join(', ') }}",
+        "additionalFields": {}
+      },
+      "id": "e4a7d32a-ffff-4444-9999-000000000015",
+      "name": "Send Chapter Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        880
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "=👋 *Welcome to your AI Study Agent!*\n\nI turn your uploaded study materials into active recall tools and quiz you right here in Telegram.\n\n📚 *What I Can Do:*\n• 📝 `/quiz [topic]` - Take a grounded multiple-choice quiz\n• 📖 `/summary [chapter]` - Get an executive chapter summary\n• 💡 `/explain [concept]` - ELI5 simple explanation with analogies\n• 📇 `/flashcards [topic]` - Generate active recall flashcards\n• 📊 `/score` - Track your accuracy and progress\n• 🔍 `/revise` - Diagnose weak topics and generate a revision plan\n\n📁 *Drop any document (PDF, Word, PPT, Excel, image, or voice note) to add it to your knowledge vault!*",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🎯 Start Agile Quiz",
+                    "additionalFields": {
+                      "callback_data": "cmd:quiz"
+                    }
+                  },
+                  {
+                    "text": "📊 My Scorecard",
+                    "additionalFields": {
+                      "callback_data": "cmd:score"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "e4a7d32a-0000-4444-9999-000000000016",
+      "name": "Send Welcome Menu",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        780,
+        1060
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "genpfqEyk7eZyRT1",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Command": {
+      "main": [
+        [
+          {
+            "node": "Parse Answer Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Grounded Quiz",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Progress API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Revision Plan API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Explain Concept API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chapter Summary API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Send Welcome Menu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Grounded Quiz": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Quiz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Answer Callback": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Answer API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Answer API": {
+      "main": [
+        [
+          {
+            "node": "Send Answer Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Progress API": {
+      "main": [
+        [
+          {
+            "node": "Send Scoreboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Revision Plan API": {
+      "main": [
+        [
+          {
+            "node": "Send Revision Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explain Concept API": {
+      "main": [
+        [
+          {
+            "node": "Send Explanation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chapter Summary API": {
+      "main": [
+        [
+          {
+            "node": "Send Chapter Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

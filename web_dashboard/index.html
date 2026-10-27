@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Study Agent — RAG Knowledge & Quiz Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Background glowing ambient spheres -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
+    <header class="app-header">
+        <div class="brand">
+            <div class="logo-icon">🧠</div>
+            <div class="brand-text">
+                <h1>StudyAgent<span class="gradient-text">.AI</span></h1>
+                <p class="subtitle">Multi-Format RAG & Telegram Active Recall Engine</p>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <div class="status-badge" id="system-status-badge">
+                <span class="status-dot"></span>
+                <span id="status-text">Qdrant Vector DB Active</span>
+            </div>
+            <div class="status-badge" id="model-status-badge" style="background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.35); color: #a5b4fc;">
+                <span class="status-dot" style="background: #818cf8; box-shadow: 0 0 10px #818cf8;"></span>
+                <span>🦙 Ollama Llama 3.1 (100% GPU)</span>
+            </div>
+            <a href="http://localhost:5678" target="_blank" class="btn btn-primary" id="btn-open-n8n">
+                ⚡ Open n8n Workflows
+            </a>
+        </div>
+    </header>
+
+    <main class="app-layout">
+        <!-- Top Stats Ribbon -->
+        <section class="stats-ribbon" id="stats-ribbon">
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-info">
+                    <span class="stat-label">Total Questions</span>
+                    <h3 class="stat-value" id="stat-total-quizzes">0</h3>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                    <span class="stat-label">Accuracy Rate</span>
+                    <h3 class="stat-value" id="stat-accuracy">0%</h3>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📚</div>
+                <div class="stat-info">
+                    <span class="stat-label">Indexed Topics</span>
+                    <h3 class="stat-value" id="stat-topics-count">...</h3>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-info">
+                    <span class="stat-label">Topics To Revise</span>
+                    <h3 class="stat-value warning-text" id="stat-weak-count">0</h3>
+                </div>
+            </div>
+        </section>
+
+        <!-- Navigation Tabs -->
+        <nav class="study-tabs" id="study-tabs">
+            <button class="tab-btn active" id="tab-btn-quiz" onclick="switchTab('quiz')">
+                <span class="tab-icon">⚡</span> Interactive Quiz
+            </button>
+            <button class="tab-btn" id="tab-btn-vault" onclick="switchTab('vault')">
+                <span class="tab-icon">📁</span> Document Vault (RAG)
+            </button>
+            <button class="tab-btn" id="tab-btn-explain" onclick="switchTab('explain')">
+                <span class="tab-icon">💡</span> Concept Explainer (ELI5)
+            </button>
+            <button class="tab-btn" id="tab-btn-flashcards" onclick="switchTab('flashcards')">
+                <span class="tab-icon">📇</span> 3D Flashcards
+            </button>
+            <button class="tab-btn" id="tab-btn-revise" onclick="switchTab('revise')">
+                <span class="tab-icon">🔍</span> Revision Roadmap
+            </button>
+        </nav>
+
+        <!-- TAB 1: INTERACTIVE QUIZ & TELEGRAM SIMULATOR -->
+        <section class="tab-content active" id="tab-quiz">
+            <div class="card quiz-card">
+                <div class="card-header">
+                    <div>
+                        <span class="badge" id="quiz-topic-badge">Topic: Agile Methodology</span>
+                        <h2 class="card-title" id="quiz-question-title">Active Recall Challenge</h2>
+                    </div>
+                    <div class="quiz-controls">
+                        <select id="select-quiz-topic" class="select-dropdown">
+                            <option value="">Select or Auto-Pick Weakest Topic</option>
+                        </select>
+                        <button class="btn btn-primary" id="btn-generate-quiz" onclick="loadNewQuiz()">
+                            🔄 New Question
+                        </button>
+                    </div>
+                </div>
+
+                <div class="quiz-body" id="quiz-body">
+                    <div class="question-stem" id="question-stem">
+                        Loading your grounded question...
+                    </div>
+
+                    <div class="options-grid" id="options-grid">
+                        <!-- Options injected dynamically -->
+                    </div>
+
+                    <!-- Evaluation & Feedback Box -->
+                    <div class="feedback-box hidden" id="feedback-box">
+                        <div class="feedback-header">
+                            <span class="feedback-badge" id="feedback-badge">✅ Correct Answer</span>
+                            <span class="citation-badge" id="citation-badge">📖 Grounding: Agile_Product_Management.md</span>
+                        </div>
+                        <p class="feedback-explanation" id="feedback-explanation"></p>
+                        <div class="feedback-actions">
+                            <button class="btn btn-primary" id="btn-next-question" onclick="loadNewQuiz()">
+                                Next Question ➡️
+                            </button>
+                            <button class="btn btn-secondary" onclick="switchTab('revise')">
+                                View Revision Plan 🔍
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: DOCUMENT VAULT & UPLOADS -->
+        <section class="tab-content" id="tab-vault">
+            <div class="grid-2-col">
+                <div class="card upload-card">
+                    <h2 class="card-title">Upload Study Materials</h2>
+                    <p class="card-subtitle">
+                        Accepts PDF, Word (.docx), PPT (.pptx), Excel (.xlsx), Markdown (.md), Images & Audio Notes.
+                    </p>
+
+                    <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+                        <div class="drop-icon">📤</div>
+                        <h4>Drop files here or click to browse</h4>
+                        <p class="drop-hint">Documents are parsed, chunked, and embedded into Qdrant for strict RAG grounding.</p>
+                        <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)" accept=".pdf,.md,.docx,.pptx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a">
+                    </div>
+
+                    <div class="upload-progress-container hidden" id="upload-progress-container">
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="upload-progress-fill"></div>
+                        </div>
+                        <span class="progress-status" id="upload-status-text">Parsing and indexing chunks...</span>
+                    </div>
+
+                    <div class="text-paste-section">
+                        <h4>Or Paste Raw Study Notes</h4>
+                        <input type="text" id="paste-title" class="input-text" placeholder="Note Title (e.g., Sprint Planning Notes)">
+                        <textarea id="paste-content" class="textarea-input" rows="4" placeholder="Paste chapter notes, lecture takeaways, or markdown here..."></textarea>
+                        <button class="btn btn-secondary" id="btn-paste-ingest" onclick="handleTextIngest()">
+                            📥 Ingest Raw Notes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card vault-list-card">
+                    <h2 class="card-title">Indexed Study Knowledge Base</h2>
+                    <p class="card-subtitle">Source materials currently available for grounded retrieval.</p>
+                    <div class="topic-list" id="topic-list">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: CONCEPT EXPLAINER (ELI5) & SUMMARY -->
+        <section class="tab-content" id="tab-explain">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Explain Difficult Concepts Simply</h2>
+                        <p class="card-subtitle">Get everyday analogies (ELI5), real-world practical applications, and citations from your notes.</p>
+                    </div>
+                </div>
+
+                <div class="explain-input-group">
+                    <input type="text" id="input-concept" class="input-text" placeholder="e.g. Velocity, Sprint Retrospective, INVEST Criteria, Burndown Chart...">
+                    <button class="btn btn-primary" id="btn-explain-concept" onclick="explainConcept()">
+                        💡 Explain Concept (ELI5)
+                    </button>
+                    <button class="btn btn-secondary" id="btn-summarize-chapter" onclick="summarizeChapter()">
+                        📖 Summarize Chapter
+                    </button>
+                </div>
+
+                <div class="explain-result hidden" id="explain-result">
+                    <div class="result-header">
+                        <span class="badge" id="explain-badge">Concept: Velocity</span>
+                        <span class="sources-tag" id="explain-sources">Sources: Agile_Product_Management.md</span>
+                    </div>
+                    <div class="markdown-output" id="explain-output"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: 3D FLASHCARDS -->
+        <section class="tab-content" id="tab-flashcards">
+            <div class="card flashcards-container">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Active Recall 3D Flashcards</h2>
+                        <p class="card-subtitle">Click the card to flip between Question and Answer.</p>
+                    </div>
+                    <div class="quiz-controls">
+                        <select id="select-flashcard-topic" class="select-dropdown">
+                            <option value="Agile Methodology">Agile Methodology</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="loadFlashcards()">Generate Decks 📇</button>
+                    </div>
+                </div>
+
+                <div class="flashcard-scene" onclick="flipCard()">
+                    <div class="flashcard-card" id="flashcard-card">
+                        <div class="flashcard-face flashcard-front">
+                            <span class="card-side-label">PROMPT (CLICK TO FLIP)</span>
+                            <h3 id="card-front-text">What is a Sprint in Scrum?</h3>
+                            <span class="card-hint">💡 Tap to reveal answer</span>
+                        </div>
+                        <div class="flashcard-face flashcard-back">
+                            <span class="card-side-label">ANSWER & EXPLANATION</span>
+                            <p id="card-back-text">A fixed timebox of 1 to 4 weeks during which the team builds a usable product increment.</p>
+                            <div class="card-meta">
+                                <span class="card-takeaway" id="card-takeaway-text">Memory Hook: Consistent duration, no scope creep.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flashcard-nav">
+                    <button class="btn btn-secondary" onclick="prevFlashcard()">⬅️ Previous</button>
+                    <span id="flashcard-index">Card 1 of 5</span>
+                    <button class="btn btn-primary" onclick="nextFlashcard()">Next ➡️</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: WEAK TOPIC REVISION ROADMAP -->
+        <section class="tab-content" id="tab-revise">
+            <div class="grid-2-col">
+                <div class="card">
+                    <h2 class="card-title">Topic Mastery & Weak Area Diagnostics</h2>
+                    <p class="card-subtitle">Topics with under 70% accuracy are automatically flagged for revision.</p>
+                    
+                    <div class="mastery-bars-list" id="mastery-bars-list">
+                        <!-- Loaded dynamically -->
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <button class="btn btn-primary" id="btn-generate-revision" onclick="generateRevisionRoadmap()">
+                            🎯 Generate Targeted Revision Roadmap
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Your 15-Minute Revision Plan</h2>
+                    <p class="card-subtitle">AI Study Coach guidance based on your missed questions.</p>
+                    <div class="revision-plan-output" id="revision-plan-output">
+                        <p class="placeholder-text">Take quizzes or click "Generate Targeted Revision Roadmap" to synthesize your study guide!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
