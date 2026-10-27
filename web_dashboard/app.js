@@ -716,6 +716,7 @@ async function loadNewQuiz() {
     const questionStem = document.getElementById("question-stem");
     const optionsGrid = document.getElementById("options-grid");
     const feedbackBox = document.getElementById("feedback-box");
+    const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
 
     if (questionStem) questionStem.innerHTML = '<span class="loading-pulse">Generating fresh grounded question...</span>';
     if (optionsGrid) optionsGrid.innerHTML = '';
@@ -725,12 +726,16 @@ async function loadNewQuiz() {
         const res = await fetch("/api/quiz", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: currentUserId, topic: chosenTopic || null })
+            body: JSON.stringify({ user_id: uid, topic: chosenTopic || null })
         });
         const quiz = await res.json();
+        if (!quiz || !quiz.question) {
+            throw new Error("Invalid quiz data received");
+        }
         currentQuiz = quiz;
         renderQuiz(quiz);
     } catch (e) {
+        console.error("Quiz load error:", e);
         if (questionStem) questionStem.innerText = "Error loading question. Please check backend connection.";
     }
 }
@@ -745,20 +750,35 @@ function renderQuiz(quiz) {
     if (!optionsGrid) return;
 
     optionsGrid.innerHTML = '';
-    const letters = ["A", "B", "C", "D"];
 
-    (quiz.options || []).forEach((opt, idx) => {
-        const letter = letters[idx] || `${idx + 1}`;
+    // Robustly handle options as Object { A: "...", B: "..." } or Array ["...", "..."]
+    let entries = [];
+    if (Array.isArray(quiz.options)) {
+        const letters = ["A", "B", "C", "D"];
+        entries = quiz.options.map((opt, idx) => [letters[idx] || `${idx + 1}`, opt]);
+    } else if (quiz.options && typeof quiz.options === 'object') {
+        entries = Object.entries(quiz.options);
+    }
+
+    if (entries.length === 0) {
+        optionsGrid.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">No options found for this question. Click New Question to generate another.</div>';
+        return;
+    }
+
+    entries.forEach(([letter, optText]) => {
         const btn = document.createElement("button");
         btn.className = "option-btn";
-        btn.innerHTML = `<span class="option-letter">${letter}</span> <span class="option-text">${escapeHtml(opt)}</span>`;
-        btn.onclick = () => submitAnswer(quiz.quiz_id, opt, btn);
+        btn.setAttribute("data-letter", letter);
+        btn.setAttribute("data-text", optText);
+        btn.innerHTML = `<span class="option-letter">${letter}</span> <span class="option-text">${escapeHtml(optText)}</span>`;
+        btn.onclick = () => submitAnswer(quiz.quiz_id, letter, optText, btn);
         optionsGrid.appendChild(btn);
     });
 }
 
-async function submitAnswer(quizId, selectedOption, selectedBtn) {
+async function submitAnswer(quizId, selectedLetter, selectedText, selectedBtn) {
     document.querySelectorAll(".option-btn").forEach(btn => btn.disabled = true);
+    const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
 
     try {
         const res = await fetch("/api/answer", {
@@ -766,18 +786,20 @@ async function submitAnswer(quizId, selectedOption, selectedBtn) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 quiz_id: quizId,
-                user_id: currentUserId,
-                selected_option: selectedOption
+                user_id: uid,
+                selected_option: selectedLetter
             })
         });
         const result = await res.json();
 
-        // Highlight options
+        // Highlight options by letter or text
         document.querySelectorAll(".option-btn").forEach(btn => {
-            const text = btn.querySelector(".option-text").innerText;
-            if (text === result.correct_option) {
+            const letter = btn.getAttribute("data-letter");
+            const text = btn.getAttribute("data-text");
+            const isCorrectOption = (letter === result.correct_option || text === result.correct_option);
+            if (isCorrectOption) {
                 btn.classList.add("correct");
-            } else if (text === selectedOption && !result.is_correct) {
+            } else if ((letter === selectedLetter || text === selectedText) && !result.is_correct) {
                 btn.classList.add("incorrect");
             }
         });
@@ -1060,8 +1082,12 @@ async function summarizeChapter() {
 // --- 3D FLASHCARDS ---
 async function loadFlashcards() {
     const topicSelect = document.getElementById("select-flashcard-topic");
-    const topic = topicSelect ? topicSelect.value : "Agile Methodology";
+    let topic = (topicSelect && topicSelect.value) ? topicSelect.value : "";
+    if (!topic || topic === "undefined") {
+        topic = "Agile Methodology";
+    }
     const frontText = document.getElementById("card-front-text");
+    const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
 
     if (frontText) frontText.innerHTML = '<span class="loading-pulse">Generating 3D recall cards...</span>';
 
@@ -1069,21 +1095,20 @@ async function loadFlashcards() {
         const res = await fetch("/api/flashcards", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ topic: topic, count: 5, user_id: currentUserId })
+            body: JSON.stringify({ topic: topic, count: 5, user_id: uid })
         });
         const data = await res.json();
-        currentFlashcards = data.flashcards || [];
+        currentFlashcards = (data && data.flashcards && data.flashcards.length) ? data.flashcards : [];
         currentFlashcardIndex = 0;
         renderFlashcard();
         loadDashboardOverview();
     } catch (e) {
-        if (frontText) frontText.innerText = "Error loading flashcard deck.";
+        console.error("Flashcards error:", e);
+        if (frontText) frontText.innerText = "Error loading flashcard deck. Click 'Generate Decks' to retry.";
     }
 }
 
 function renderFlashcard() {
-    if (!currentFlashcards.length) return;
-    const card = currentFlashcards[currentFlashcardIndex];
     const frontText = document.getElementById("card-front-text");
     const backText = document.getElementById("card-back-text");
     const takeawayText = document.getElementById("card-takeaway-text");
@@ -1091,9 +1116,23 @@ function renderFlashcard() {
     const flashcardEl = document.getElementById("flashcard-card");
 
     if (flashcardEl) flashcardEl.classList.remove("flipped");
-    if (frontText) frontText.innerText = card.question;
-    if (backText) backText.innerText = card.answer;
-    if (takeawayText) takeawayText.innerText = `Memory Hook: ${card.takeaway || "Review regularly"}`;
+
+    if (!currentFlashcards || !currentFlashcards.length) {
+        if (frontText) frontText.innerText = "No flashcards generated for this topic yet. Click 'Generate Decks' to create cards!";
+        if (backText) backText.innerText = "Upload lecture notes to create more custom flashcards.";
+        if (takeawayText) takeawayText.innerText = "Memory Hook: Active recall improves long-term retention.";
+        if (indexLabel) indexLabel.innerText = "Card 0 of 0";
+        return;
+    }
+
+    const card = currentFlashcards[currentFlashcardIndex];
+    const prompt = card.front || card.question || card.prompt || "Question prompt";
+    const answer = card.back || card.answer || card.definition || "Answer details";
+    const hook = card.key_takeaway || card.takeaway || "Review regularly";
+
+    if (frontText) frontText.innerText = prompt;
+    if (backText) backText.innerText = answer;
+    if (takeawayText) takeawayText.innerText = `Memory Hook: ${hook}`;
     if (indexLabel) indexLabel.innerText = `Card ${currentFlashcardIndex + 1} of ${currentFlashcards.length}`;
 }
 

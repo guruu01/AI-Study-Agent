@@ -521,9 +521,23 @@ Respond in STRICT JSON format with this exact schema:
                 "message": "Quiz session expired. Use /quiz to start a new question!"
             }
 
-        correct_option = active["correct_option"].upper().strip()
-        selected_option = selected_option.upper().strip()
-        is_correct = (selected_option == correct_option)
+        correct_letter = active["correct_option"].upper().strip()
+        selected_raw = selected_option.strip()
+
+        options = {}
+        try:
+            options = json.loads(active.get("options_json", "{}"))
+        except Exception:
+            pass
+
+        correct_text = options.get(correct_letter, "").strip()
+
+        # Check match by letter ('A' == 'A') OR by full text ('Scrum Master' == 'Scrum Master')
+        is_correct = (
+            selected_raw.upper() == correct_letter or
+            (bool(correct_text) and selected_raw.lower() == correct_text.lower())
+        )
+        correct_option = correct_letter
 
         # Record result in database
         stats = self.tracker.record_quiz_result(

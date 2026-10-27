@@ -211,7 +211,8 @@ def ingest_text(req: TextIngestRequest):
 @app.post("/api/quiz")
 def generate_quiz(req: QuizRequest):
     """Generates an MCQ quiz question grounded in user's materials."""
-    return agent.generate_quiz(user_id=req.user_id, topic=req.topic)
+    uid = req.user_id.strip() if req.user_id and req.user_id.strip() else "default_student"
+    return agent.generate_quiz(user_id=uid, topic=req.topic)
 
 @app.get("/api/auth/config")
 def get_auth_config():
