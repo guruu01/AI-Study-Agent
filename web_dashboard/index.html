@@ -350,11 +350,16 @@
                             Accepts PDF, Word (.docx), PPT (.pptx), Excel (.xlsx), Markdown (.md), Images & Audio Notes.
                         </p>
 
-                        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+                        <div class="dropzone" id="dropzone">
                             <div class="drop-icon">📤</div>
-                            <h4>Drop files here or click to browse</h4>
-                            <p class="drop-hint">Documents are parsed, chunked, and embedded into Qdrant for strict RAG grounding.</p>
-                            <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)" accept=".pdf,.md,.docx,.pptx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a">
+                            <h4>Drop files or whole study folders here</h4>
+                            <p class="drop-hint">Upload individual documents, audio notes, or an entire directory of course materials.</p>
+                            <div class="dropzone-actions" style="display: flex; gap: 0.6rem; justify-content: center; margin-top: 0.8rem; z-index: 2; position: relative;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('file-input').click()">📄 Upload Files</button>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); document.getElementById('folder-input').click()">📁 Upload Folder</button>
+                            </div>
+                            <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)" accept=".pdf,.md,.docx,.pptx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a" multiple>
+                            <input type="file" id="folder-input" style="display: none;" onchange="handleFolderUpload(event)" webkitdirectory directory multiple>
                         </div>
 
                         <div class="upload-progress-container hidden" id="upload-progress-container">
@@ -693,6 +698,76 @@
             </div>
             <div class="modal-form-actions">
                 <button class="btn btn-primary" onclick="closeModal('modal-terms')">I Accept</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: DOCUMENT VIEWER                    -->
+    <!-- ========================================== -->
+    <div class="modal-overlay hidden" id="modal-doc-viewer">
+        <div class="modal-card modal-doc-card">
+            <div class="modal-header">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                        <span id="doc-viewer-icon" style="font-size: 2rem;">📄</span>
+                        <div>
+                            <h2 id="doc-viewer-title" style="font-size: 1.25rem; margin: 0; word-break: break-all;">Document Viewer</h2>
+                            <p class="modal-subtitle" id="doc-viewer-meta" style="margin: 0.25rem 0 0 0;">Loading metadata...</p>
+                        </div>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeModal('modal-doc-viewer')">✕</button>
+                </div>
+            </div>
+
+            <div class="doc-viewer-tabs" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); padding: 0.5rem 0; margin-bottom: 1rem;">
+                <button class="doc-tab-btn active" id="btn-tab-fulltext" onclick="switchDocViewerTab('fulltext')">📖 Extracted Content</button>
+                <button class="doc-tab-btn" id="btn-tab-chunks" onclick="switchDocViewerTab('chunks')">🧩 Vector Chunks (<span id="doc-viewer-chunk-count">0</span>)</button>
+            </div>
+
+            <div class="doc-viewer-topics" id="doc-viewer-topics" style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem;">
+                <!-- Topic tags populated dynamically -->
+            </div>
+
+            <div class="doc-viewer-body" id="doc-viewer-body" style="max-height: 50vh; overflow-y: auto; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; font-size: 0.9rem; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap;">
+                Loading document content...
+            </div>
+
+            <div class="doc-viewer-chunks-container hidden" id="doc-viewer-chunks-container" style="max-height: 50vh; overflow-y: auto;">
+                <!-- Chunks list populated dynamically -->
+            </div>
+
+            <div class="modal-form-actions" style="margin-top: 1.2rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary btn-sm" id="btn-viewer-quiz" onclick="startQuizFromViewer()">❓ Quiz Me On This</button>
+                    <button class="btn btn-secondary btn-sm" id="btn-viewer-flashcards" onclick="startFlashcardsFromViewer()">🎴 Flashcards</button>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-danger btn-sm" id="btn-viewer-delete" onclick="confirmDeleteFromViewer()">🗑️ Delete</button>
+                    <button class="btn btn-primary btn-sm" onclick="closeModal('modal-doc-viewer')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: CONFIRM DELETE DOCUMENT            -->
+    <!-- ========================================== -->
+    <div class="modal-overlay hidden" id="modal-confirm-delete">
+        <div class="modal-card" style="max-width: 440px;">
+            <div class="modal-header">
+                <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;">🗑️</div>
+                <h2 style="color: #ef4444;">Delete Resource</h2>
+                <p class="modal-subtitle">Are you sure you want to permanently remove this document from your vault?</p>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; margin: 1rem 0;">
+                <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.3rem;" id="delete-target-filename">filename.pdf</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">This will remove all associated vector embeddings and chunk definitions from your memory vault.</div>
+            </div>
+            <div class="modal-form-actions" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete')">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btn-confirm-delete-action" onclick="executeDeleteDocument()">Delete Resource</button>
             </div>
         </div>
     </div>

@@ -897,6 +897,9 @@ async function loadTopics() {
     }
 }
 
+let currentViewerDoc = null;
+let currentDeleteTarget = "";
+
 async function loadVaultDocuments() {
     try {
         const res = await fetch(`/api/vault/documents?user_id=${encodeURIComponent(currentUserId)}`);
@@ -905,7 +908,7 @@ async function loadVaultDocuments() {
         if (!docList) return;
 
         if (!docs || docs.length === 0) {
-            docList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No private files uploaded yet. Drag & drop files above!</div>';
+            docList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No private files uploaded yet. Drag & drop files or folders above!</div>';
             return;
         }
 
@@ -913,12 +916,19 @@ async function loadVaultDocuments() {
             const privacyIcon = d.is_private ? "🔒" : "🌐";
             const privacyLabel = d.is_private ? `Private to ${currentUserId}` : "Shared Library";
             const chunkVal = d.chunk_count != null ? d.chunk_count : (d.chunks != null ? d.chunks : 0);
+            const encName = encodeURIComponent(d.filename);
             return `
                 <div class="doc-item">
-                    <div class="doc-icon">${getFileIcon(d.filename)}</div>
-                    <div class="doc-meta">
-                        <div class="doc-title">${escapeHtml(d.filename)}</div>
-                        <div class="doc-sub">${privacyIcon} ${privacyLabel} • ${chunkVal} chunks</div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
+                        <div class="doc-icon">${getFileIcon(d.filename)}</div>
+                        <div class="doc-meta" style="min-width: 0;">
+                            <div class="doc-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;" title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</div>
+                            <div class="doc-sub">${privacyIcon} ${privacyLabel} • ${chunkVal} chunks</div>
+                        </div>
+                    </div>
+                    <div class="doc-actions">
+                        <button class="doc-btn doc-btn-view" onclick="openDocViewer('${encName}')" title="View document content & chunks">👁️ View</button>
+                        <button class="doc-btn doc-btn-delete" onclick="promptDeleteDoc('${encName}')" title="Delete from vault">🗑️ Delete</button>
                     </div>
                 </div>
             `;
@@ -934,10 +944,226 @@ function getFileIcon(filename) {
     if (filename.endsWith(".pptx")) return "📙";
     if (filename.endsWith(".xlsx")) return "📊";
     if (filename.endsWith(".mp3") || filename.endsWith(".wav")) return "🎙️";
+    if (filename.endsWith(".md")) return "📝";
     return "📄";
 }
 
-// File Upload
+// --- DOCUMENT VIEWER MODAL LOGIC ---
+async function openDocViewer(encodedFilename) {
+    const filename = decodeURIComponent(encodedFilename);
+    const viewerBody = document.getElementById("doc-viewer-body");
+    const viewerTitle = document.getElementById("doc-viewer-title");
+    const viewerMeta = document.getElementById("doc-viewer-meta");
+    const viewerIcon = document.getElementById("doc-viewer-icon");
+    const topicsContainer = document.getElementById("doc-viewer-topics");
+    const chunkCountSpan = document.getElementById("doc-viewer-chunk-count");
+    const chunksContainer = document.getElementById("doc-viewer-chunks-container");
+
+    if (viewerTitle) viewerTitle.innerText = filename;
+    if (viewerIcon) viewerIcon.innerText = getFileIcon(filename);
+    if (viewerMeta) viewerMeta.innerText = "Loading chunks and extracted notes...";
+    if (viewerBody) viewerBody.innerText = "Fetching document details from vector vault...";
+    if (topicsContainer) topicsContainer.innerHTML = "";
+    if (chunksContainer) chunksContainer.innerHTML = "";
+
+    switchDocViewerTab("fulltext");
+    openModal("modal-doc-viewer");
+
+    try {
+        const uid = currentUserId || "default_student";
+        const res = await fetch(`/api/vault/document?filename=${encodeURIComponent(filename)}&user_id=${encodeURIComponent(uid)}`);
+        if (!res.ok) throw new Error("Could not load document content");
+        const doc = await res.json();
+        currentViewerDoc = doc;
+
+        const privBadge = doc.is_private ? "🔒 Private" : "🌐 Shared Library";
+        if (viewerMeta) viewerMeta.innerText = `${privBadge} • ${doc.chunk_count} vector chunks • Owner: ${doc.owner || "you"}`;
+        if (chunkCountSpan) chunkCountSpan.innerText = doc.chunk_count;
+
+        if (topicsContainer && doc.topics) {
+            topicsContainer.innerHTML = doc.topics.map(t => 
+                `<span class="badge" style="background: rgba(99,102,241,0.15); color: var(--primary); font-size: 0.75rem;">📌 ${escapeHtml(t)}</span>`
+            ).join("");
+        }
+
+        if (viewerBody) {
+            viewerBody.innerText = doc.full_text || "No text content available.";
+        }
+
+        if (chunksContainer && doc.chunk_items) {
+            chunksContainer.innerHTML = doc.chunk_items.map((c, i) => `
+                <div class="chunk-item-card">
+                    <div class="chunk-item-header">
+                        <span>Chunk #${i + 1} (${escapeHtml(c.chunk_id || "")})</span>
+                        <span>📌 ${escapeHtml(c.topic || "General")}</span>
+                    </div>
+                    <div class="chunk-item-body">${escapeHtml(c.text || "")}</div>
+                </div>
+            `).join("");
+        }
+    } catch (e) {
+        console.error("View doc error:", e);
+        if (viewerBody) viewerBody.innerText = "Failed to load document content. Please verify backend connection.";
+    }
+}
+
+function switchDocViewerTab(tab) {
+    const tabFull = document.getElementById("btn-tab-fulltext");
+    const tabChunks = document.getElementById("btn-tab-chunks");
+    const bodyFull = document.getElementById("doc-viewer-body");
+    const bodyChunks = document.getElementById("doc-viewer-chunks-container");
+
+    if (tab === "fulltext") {
+        if (tabFull) tabFull.classList.add("active");
+        if (tabChunks) tabChunks.classList.remove("active");
+        if (bodyFull) bodyFull.classList.remove("hidden");
+        if (bodyChunks) bodyChunks.classList.add("hidden");
+    } else {
+        if (tabFull) tabFull.classList.remove("active");
+        if (tabChunks) tabChunks.classList.add("active");
+        if (bodyFull) bodyFull.classList.add("hidden");
+        if (bodyChunks) bodyChunks.classList.remove("hidden");
+    }
+}
+
+function startQuizFromViewer() {
+    closeModal("modal-doc-viewer");
+    switchTab("quiz");
+    if (currentViewerDoc && currentViewerDoc.topics && currentViewerDoc.topics.length) {
+        const topicSelect = document.getElementById("select-quiz-topic");
+        if (topicSelect) {
+            topicSelect.value = currentViewerDoc.topics[0];
+        }
+    }
+    loadNewQuiz();
+}
+
+function startFlashcardsFromViewer() {
+    closeModal("modal-doc-viewer");
+    switchTab("flashcards");
+    if (currentViewerDoc && currentViewerDoc.topics && currentViewerDoc.topics.length) {
+        const topicInput = document.getElementById("input-flashcard-topic");
+        if (topicInput) {
+            topicInput.value = currentViewerDoc.topics[0];
+        }
+    }
+    generateFlashcards();
+}
+
+function confirmDeleteFromViewer() {
+    if (!currentViewerDoc) return;
+    promptDeleteDoc(encodeURIComponent(currentViewerDoc.filename));
+}
+
+function promptDeleteDoc(encodedFilename) {
+    const filename = decodeURIComponent(encodedFilename);
+    currentDeleteTarget = filename;
+    const targetEl = document.getElementById("delete-target-filename");
+    if (targetEl) targetEl.innerText = filename;
+    openModal("modal-confirm-delete");
+}
+
+async function executeDeleteDocument() {
+    if (!currentDeleteTarget) return;
+    const filename = currentDeleteTarget;
+    const btn = document.getElementById("btn-confirm-delete-action");
+    if (btn) btn.innerText = "Deleting...";
+
+    try {
+        const uid = currentUserId || "default_student";
+        const res = await fetch(`/api/vault/document?filename=${encodeURIComponent(filename)}&user_id=${encodeURIComponent(uid)}`, {
+            method: "DELETE"
+        });
+        const result = await res.json();
+        closeModal("modal-confirm-delete");
+        closeModal("modal-doc-viewer");
+        showToast(`Deleted ${filename} from your vault.`, "success");
+
+        await Promise.all([
+            loadTopics(),
+            loadVaultDocuments(),
+            loadDashboardOverview()
+        ]);
+    } catch (e) {
+        console.error("Delete doc error:", e);
+        showToast("Failed to delete document.", "error");
+    } finally {
+        if (btn) btn.innerText = "Delete Resource";
+        currentDeleteTarget = "";
+    }
+}
+
+// --- FOLDER & BATCH UPLOAD HANDLING ---
+async function handleFolderUpload(event) {
+    const allFiles = Array.from(event.target.files || []);
+    if (!allFiles.length) return;
+
+    // Filter valid study document extensions
+    const validExtensions = [".pdf", ".md", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".png", ".jpg", ".jpeg", ".mp3", ".wav", ".m4a"];
+    const filesToUpload = allFiles.filter(f => {
+        const name = f.name.toLowerCase();
+        if (name.startsWith(".") || name === "thumbs.db" || name === "desktop.ini") return false;
+        return validExtensions.some(ext => name.endsWith(ext));
+    });
+
+    if (!filesToUpload.length) {
+        showToast("No readable study documents found in the selected folder.", "warning");
+        return;
+    }
+
+    const progressContainer = document.getElementById("upload-progress-container");
+    const progressBar = document.getElementById("upload-progress-fill");
+    const statusText = document.getElementById("upload-status-text");
+
+    if (progressContainer) progressContainer.classList.remove("hidden");
+    
+    let totalIndexed = 0;
+    let completedCount = 0;
+
+    for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        const pct = Math.round(((i) / filesToUpload.length) * 100);
+        if (progressBar) progressBar.style.width = `${pct}%`;
+        if (statusText) statusText.innerText = `Indexing file ${i + 1} of ${filesToUpload.length}: ${file.name} (${pct}%)...`;
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("user_id", currentUserId || "default_student");
+
+        try {
+            const res = await fetch("/api/ingest", {
+                method: "POST",
+                body: formData
+            });
+            const result = await res.json();
+            const count = result.chunks_indexed != null ? result.chunks_indexed : (result.indexed_count || 0);
+            totalIndexed += count;
+            completedCount++;
+        } catch (err) {
+            console.warn(`Error uploading ${file.name}:`, err);
+        }
+    }
+
+    if (progressBar) progressBar.style.width = "100%";
+    if (statusText) statusText.innerText = `Folder indexed: ${completedCount} documents (${totalIndexed} chunks)!`;
+    showToast(`Folder uploaded! Successfully indexed ${completedCount} documents (${totalIndexed} chunks).`, "success");
+
+    await Promise.all([
+        loadTopics(),
+        loadVaultDocuments(),
+        loadDashboardOverview()
+    ]);
+
+    setTimeout(() => {
+        if (progressContainer) progressContainer.classList.add("hidden");
+        if (progressBar) progressBar.style.width = "0%";
+    }, 4000);
+
+    // Reset folder input
+    event.target.value = "";
+}
+
+// File & Folder Dropzone Initialization
 function initDropzone() {
     const dropzone = document.getElementById("dropzone");
     if (!dropzone) return;
@@ -958,11 +1184,69 @@ function initDropzone() {
         }, false);
     });
 
-    dropzone.addEventListener("drop", (e) => {
+    dropzone.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove("dragover");
+
         const dt = e.dataTransfer;
+        if (!dt) return;
+
+        // Check if items contain directories via webkitGetAsEntry
+        const items = dt.items;
+        if (items && items.length && items[0].webkitGetAsEntry) {
+            const entries = [];
+            for (let i = 0; i < items.length; i++) {
+                const entry = items[i].webkitGetAsEntry();
+                if (entry) entries.push(entry);
+            }
+            const files = await traverseFileTree(entries);
+            if (files.length > 1 || (entries[0] && entries[0].isDirectory)) {
+                handleFolderUpload({ target: { files: files } });
+                return;
+            }
+        }
+
         const files = dt.files;
-        if (files.length) handleFileUpload({ target: { files: files } });
+        if (files && files.length > 1) {
+            handleFolderUpload({ target: { files: files } });
+        } else if (files && files.length === 1) {
+            handleFileUpload({ target: { files: files } });
+        }
     });
+}
+
+// Helper to recursively traverse dropped directories
+async function traverseFileTree(entries) {
+    const files = [];
+    async function readEntry(entry) {
+        if (entry.isFile) {
+            await new Promise((resolve) => {
+                entry.file((file) => {
+                    files.push(file);
+                    resolve();
+                }, () => resolve());
+            });
+        } else if (entry.isDirectory) {
+            const dirReader = entry.createReader();
+            const readEntries = async () => {
+                const subEntries = await new Promise((resolve) => {
+                    dirReader.readEntries((results) => resolve(results), () => resolve([]));
+                });
+                if (subEntries.length > 0) {
+                    for (const sub of subEntries) {
+                        await readEntry(sub);
+                    }
+                    await readEntries();
+                }
+            };
+            await readEntries();
+        }
+    }
+    for (const ent of entries) {
+        await readEntry(ent);
+    }
+    return files;
 }
 
 async function handleFileUpload(event) {

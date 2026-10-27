@@ -265,6 +265,7 @@ class RAGEngine:
                     "chunks": v["chunk_count"],
                     "owner": v["owner"],
                     "is_private": v["is_private"],
+                    "can_delete": True,
                     "privacy_label": "🔒 Private to You" if v["is_private"] else "🌐 Shared Library"
                 }
                 for k, v in docs.items()
@@ -272,4 +273,107 @@ class RAGEngine:
         except Exception as e:
             print(f"Error fetching user documents: {e}")
             return []
+
+    def get_document_content(self, filename: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves all chunks, topics, and consolidated text of a document visible to user_id.
+        """
+        try:
+            scroll_result, _ = self.client.scroll(
+                collection_name=COLLECTION_NAME,
+                limit=1000,
+                with_payload=True,
+                with_vectors=False
+            )
+            chunks = []
+            topics = set()
+            owner = "common"
+            is_private = False
+
+            for point in scroll_result:
+                payload = getattr(point, "payload", {}) or {}
+                if payload.get("filename") == filename:
+                    p_user = payload.get("user_id", "common")
+                    if user_id and p_user not in [user_id, "common", "default_student"]:
+                        continue
+                    owner = p_user
+                    if user_id and p_user == user_id and user_id != "common":
+                        is_private = True
+                    topics.add(payload.get("topic", "General"))
+                    chunks.append({
+                        "chunk_id": payload.get("chunk_id", str(point.id)),
+                        "topic": payload.get("topic", "General"),
+                        "text": payload.get("text", "")
+                    })
+
+            if not chunks:
+                return None
+
+            # Sort chunks in natural order (chunk_id e.g. filename_1, filename_2)
+            def chunk_sort_key(c):
+                cid = str(c.get("chunk_id", ""))
+                if "_" in cid:
+                    try:
+                        return int(cid.rsplit("_", 1)[1])
+                    except ValueError:
+                        pass
+                return cid
+
+            chunks.sort(key=chunk_sort_key)
+            full_text = "\n\n".join([f"### {c['topic']}\n\n{c['text']}" for c in chunks])
+
+            return {
+                "filename": filename,
+                "topics": sorted(list(topics)),
+                "chunk_count": len(chunks),
+                "chunks": len(chunks),
+                "owner": owner,
+                "is_private": is_private,
+                "can_delete": True,
+                "full_text": full_text,
+                "chunk_items": chunks
+            }
+        except Exception as e:
+            print(f"Error fetching document content: {e}")
+            return None
+
+    def delete_document(self, filename: str, user_id: str = "default_student") -> Dict[str, Any]:
+        """
+        Deletes all chunks of a document from Qdrant and removes file from disk.
+        """
+        try:
+            # Filter points by filename
+            filter_conditions = [
+                models.FieldCondition(key="filename", match=models.MatchValue(value=filename))
+            ]
+            if user_id and user_id not in ["admin", "common"]:
+                # Match user's own uploads or default_student
+                filter_conditions.append(
+                    models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id))
+                )
+
+            delete_filter = models.Filter(must=filter_conditions)
+            self.client.delete(
+                collection_name=COLLECTION_NAME,
+                points_selector=models.FilterSelector(filter=delete_filter)
+            )
+
+            # Clean up local raw file if exists
+            safe_name = os.path.basename(filename)
+            raw_path = os.path.join(os.path.dirname(__file__), "..", "uploaded_docs", safe_name)
+            if os.path.exists(raw_path):
+                try:
+                    os.remove(raw_path)
+                except Exception:
+                    pass
+
+            return {
+                "status": "success",
+                "filename": filename,
+                "message": f"Successfully deleted {filename} and all its indexed chunks from your vault."
+            }
+        except Exception as e:
+            print(f"Error deleting document {filename}: {e}")
+            return {"status": "error", "message": str(e)}
+
 

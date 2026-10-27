@@ -158,6 +158,69 @@ def list_vault_documents(user_id: Optional[str] = Query(None)):
     """Returns all documents in the user's private vault and shared library."""
     return rag_engine.get_user_documents(user_id=user_id)
 
+@app.get("/api/vault/document")
+def get_vault_document(filename: str = Query(...), user_id: Optional[str] = Query(None)):
+    """Returns detailed content, chunk list, and topics for a specific document."""
+    doc = rag_engine.get_document_content(filename=filename, user_id=user_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found or access denied.")
+    return doc
+
+@app.delete("/api/vault/document")
+def delete_vault_document(filename: str = Query(...), user_id: str = Query("default_student")):
+    """Deletes a document and all its indexed chunks from the user's vault."""
+    res = rag_engine.delete_document(filename=filename, user_id=user_id)
+    if res.get("status") == "error":
+        raise HTTPException(status_code=500, detail=res.get("message", "Failed to delete document"))
+    return res
+
+@app.post("/api/ingest/batch")
+async def ingest_batch_files(
+    files: List[UploadFile] = File(...),
+    user_id: str = Form("default_student")
+):
+    """
+    Accepts multiple files from folder upload.
+    Ingests each file into user's private vault and returns overall statistics.
+    """
+    results = []
+    total_chunks = 0
+    errors = []
+
+    for file in files:
+        safe_filename = Path(file.filename).name
+        if safe_filename.startswith(".") or safe_filename.lower() in ["thumbs.db", "desktop.ini"]:
+            continue
+
+        file_path = os.path.join(UPLOAD_DIR, safe_filename)
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            text = extract_text_from_file(file_path, gemini_api_key=agent.gemini_api_key)
+            if not text.strip():
+                continue
+
+            chunks = chunk_text(text, filename=safe_filename)
+            indexed_count = rag_engine.index_chunks(chunks, user_id=user_id)
+            total_chunks += indexed_count
+            results.append({
+                "filename": safe_filename,
+                "chunks": indexed_count
+            })
+        except Exception as e:
+            errors.append(f"{safe_filename}: {str(e)}")
+
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "files_indexed": len(results),
+        "total_chunks_indexed": total_chunks,
+        "details": results,
+        "errors": errors,
+        "message": f"Successfully ingested {len(results)} files ({total_chunks} chunks) into vault for {user_id}!"
+    }
+
 @app.post("/api/ingest")
 async def ingest_file(
     file: UploadFile = File(...),
