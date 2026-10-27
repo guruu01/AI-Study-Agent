@@ -14,7 +14,8 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+_port = os.getenv("PORT", "8000")
+API_BASE_URL = os.getenv("API_BASE_URL", f"http://127.0.0.1:{_port}").rstrip("/")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 print("Starting Telegram Study Bot...")

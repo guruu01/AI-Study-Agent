@@ -34,7 +34,7 @@ class StudyTracker:
         except Exception:
             return str(uuid.uuid5(uuid.NAMESPACE_DNS, user_id))
 
-    def _supabase_request(self, method: str, table: str, json_data: Any = None, params: Dict[str, Any] = None) -> Optional[Any]:
+    def _supabase_request(self, method: str, table: str, json_data: Any = None, params: Dict[str, Any] = None, headers_override: Dict[str, str] = None) -> Optional[Any]:
         """Executes REST request to Supabase PostgREST endpoint with service credentials."""
         if not self.supabase_enabled:
             return None
@@ -45,6 +45,8 @@ class StudyTracker:
             "Content-Type": "application/json",
             "Prefer": "return=representation"
         }
+        if headers_override:
+            headers.update(headers_override)
         try:
             if method.upper() == "GET":
                 res = requests.get(url, headers=headers, params=params, timeout=6)
@@ -226,7 +228,13 @@ class StudyTracker:
                     t_attempts = val["attempts"]
                     t_correct = val["correct"]
                     t_acc = round((t_correct / t_attempts * 100), 1)
-                    status = "Mastered" if t_acc >= 80 else ("Reviewing" if t_acc >= 60 else "Needs Revision")
+                    # Enforce minimum 3 attempts before declaring topic as Mastered
+                    if t_attempts >= 3 and t_acc >= 80:
+                        status = "Mastered"
+                    elif t_acc >= 60:
+                        status = "Reviewing"
+                    else:
+                        status = "Needs Revision"
                     topics.append({
                         "topic": top,
                         "attempts": t_attempts,
@@ -275,7 +283,13 @@ class StudyTracker:
                 t_correct = row["correct"] or 0
                 t_acc = round((t_correct / t_attempts * 100), 1)
                 
-                status = "Mastered" if t_acc >= 80 else ("Reviewing" if t_acc >= 60 else "Needs Revision")
+                # Enforce minimum 3 attempts before declaring topic as Mastered
+                if t_attempts >= 3 and t_acc >= 80:
+                    status = "Mastered"
+                elif t_acc >= 60:
+                    status = "Reviewing"
+                else:
+                    status = "Needs Revision"
                 topics.append({
                     "topic": row["topic"],
                     "attempts": t_attempts,
@@ -300,17 +314,44 @@ class StudyTracker:
         weak_topics = []
         for t in stats["topic_breakdown"]:
             if t["accuracy"] < threshold:
-                # Fetch recent failed questions for this topic
-                with self._get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        SELECT question, selected_option, correct_option, source_doc, created_at
-                        FROM quiz_history
-                        WHERE user_id = ? AND topic = ? AND is_correct = 0
-                        ORDER BY created_at DESC
-                        LIMIT 3
-                    ''', (user_id, t["topic"]))
-                    failed_questions = [dict(r) for r in cursor.fetchall()]
+                failed_questions = []
+                # 1. First attempt to pull failed questions from Supabase Cloud
+                if self.supabase_enabled:
+                    try:
+                        uuid_str = self._to_uuid(user_id)
+                        rows = self._supabase_request("GET", "quiz_history", params={
+                            "user_id": f"eq.{uuid_str}",
+                            "topic": f"eq.{t['topic']}",
+                            "is_correct": "eq.false",
+                            "order": "created_at.desc",
+                            "limit": "3"
+                        })
+                        if rows:
+                            failed_questions = [
+                                {
+                                    "question": r.get("question", ""),
+                                    "selected_option": r.get("selected_option", ""),
+                                    "correct_option": r.get("correct_option", ""),
+                                    "source_doc": r.get("source_doc", ""),
+                                    "created_at": r.get("created_at", "")
+                                }
+                                for r in rows
+                            ]
+                    except Exception as se:
+                        print(f"Supabase failed questions notice: {se}")
+
+                # 2. Fallback to local SQLite if Supabase had no rows
+                if not failed_questions:
+                    with self._get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            SELECT question, selected_option, correct_option, source_doc, created_at
+                            FROM quiz_history
+                            WHERE user_id = ? AND topic = ? AND is_correct = 0
+                            ORDER BY created_at DESC
+                            LIMIT 3
+                        ''', (user_id, t["topic"]))
+                        failed_questions = [dict(r) for r in cursor.fetchall()]
 
                 weak_topics.append({
                     "topic": t["topic"],
@@ -323,31 +364,51 @@ class StudyTracker:
     def get_recent_questions(self, user_id: str, limit: int = 15) -> List[str]:
         """Returns the text of recently answered or generated questions to avoid repeats."""
         questions = []
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            # 1. From active_quizzes (questions generated recently)
-            cursor.execute('''
-                SELECT question FROM active_quizzes
-                WHERE user_id = ?
-                ORDER BY created_at DESC
-                LIMIT ?
-            ''', (user_id, limit))
-            for row in cursor.fetchall():
-                q = row["question"].strip() if row["question"] else ""
-                if q and q not in questions:
-                    questions.append(q)
+        # 1. Query Supabase Cloud if connected
+        if self.supabase_enabled:
+            try:
+                uuid_str = self._to_uuid(user_id)
+                rows = self._supabase_request("GET", "quiz_history", params={
+                    "user_id": f"eq.{uuid_str}",
+                    "select": "question",
+                    "order": "created_at.desc",
+                    "limit": str(limit)
+                })
+                if rows:
+                    for r in rows:
+                        q = (r.get("question") or "").strip()
+                        if q and q not in questions:
+                            questions.append(q)
+            except Exception:
+                pass
 
-            # 2. From quiz_history (questions answered)
-            cursor.execute('''
-                SELECT question FROM quiz_history
-                WHERE user_id = ?
-                ORDER BY id DESC
-                LIMIT ?
-            ''', (user_id, limit))
-            for row in cursor.fetchall():
-                q = row["question"].strip() if row["question"] else ""
-                if q and q not in questions:
-                    questions.append(q)
+        # 2. Fallback / supplementary check with local SQLite
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT question FROM active_quizzes
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (user_id, limit))
+                for row in cursor.fetchall():
+                    q = row["question"].strip() if row["question"] else ""
+                    if q and q not in questions:
+                        questions.append(q)
+
+                cursor.execute('''
+                    SELECT question FROM quiz_history
+                    WHERE user_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                ''', (user_id, limit))
+                for row in cursor.fetchall():
+                    q = row["question"].strip() if row["question"] else ""
+                    if q and q not in questions:
+                        questions.append(q)
+        except Exception:
+            pass
 
         return questions[:limit]
 
@@ -499,6 +560,55 @@ class StudyTracker:
     def get_recent_activity(self, user_id: str, limit: int = 8) -> List[Dict[str, Any]]:
         """Returns unified timeline of recent user actions (quizzes, flashcards, readings)."""
         activity = []
+        if self.supabase_enabled:
+            try:
+                uuid_str = self._to_uuid(user_id)
+                # 1. From Supabase quiz_history
+                q_rows = self._supabase_request("GET", "quiz_history", params={
+                    "user_id": f"eq.{uuid_str}",
+                    "order": "created_at.desc",
+                    "limit": str(limit)
+                })
+                if q_rows:
+                    for r in q_rows:
+                        is_corr = bool(r.get("is_correct"))
+                        q_txt = (r.get("question") or "")[:60]
+                        desc = f"Answered Correctly: {q_txt}" if is_corr else f"Needs Review: {q_txt}"
+                        activity.append({
+                            "type": "quiz",
+                            "topic": r.get("topic") or "General",
+                            "description": desc,
+                            "is_correct": 1 if is_corr else 0,
+                            "created_at": r.get("created_at")
+                        })
+
+                # 2. From Supabase study_sessions
+                s_rows = self._supabase_request("GET", "study_sessions", params={
+                    "user_id": f"eq.{uuid_str}",
+                    "order": "created_at.desc",
+                    "limit": str(limit)
+                })
+                if s_rows:
+                    for r in s_rows:
+                        stype = r.get("session_type") or "study"
+                        if stype == "quiz":
+                            continue  # skip auto-generated quiz session to avoid duplicates
+                        activity.append({
+                            "type": stype,
+                            "topic": r.get("topic") or "General",
+                            "description": f"Completed {stype} review",
+                            "is_correct": 1,
+                            "created_at": r.get("created_at")
+                        })
+            except Exception as e:
+                print(f"Supabase recent activity notice: {e}")
+
+        # If Supabase provided activity, sort and return
+        if activity:
+            activity.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
+            return activity[:limit]
+
+        # Fallback to local SQLite
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # 1. From quiz_history
@@ -515,13 +625,13 @@ class StudyTracker:
             for r in cursor.fetchall():
                 activity.append(dict(r))
 
-            # 2. From study_sessions
+            # 2. From study_sessions (excluding auto-linked quiz sessions)
             cursor.execute('''
                 SELECT session_type as type, topic, 
                        CASE WHEN details != '' THEN details ELSE 'Completed ' || session_type || ' session' END as description,
                        1 as is_correct, created_at
                 FROM study_sessions
-                WHERE user_id = ?
+                WHERE user_id = ? AND session_type != 'quiz'
                 ORDER BY created_at DESC
                 LIMIT ?
             ''', (user_id, limit))
@@ -538,13 +648,34 @@ class StudyTracker:
         stats = self.get_user_stats(user_id)
         recent_activity = self.get_recent_activity(user_id, limit=6)
 
+        session_count = 0
+        session_seconds = 0
+
+        # Query Supabase study_sessions if connected
+        if self.supabase_enabled:
+            try:
+                uuid_str = self._to_uuid(user_id)
+                s_rows = self._supabase_request("GET", "study_sessions", params={
+                    "user_id": f"eq.{uuid_str}",
+                    "session_type": "neq.quiz",
+                    "select": "duration_seconds"
+                })
+                if s_rows is not None and len(s_rows) > 0:
+                    session_count = len(s_rows)
+                    session_seconds = sum(int(r.get("duration_seconds") or 0) for r in s_rows)
+            except Exception:
+                pass
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # Total study sessions logged
-            cursor.execute('SELECT COUNT(*) as session_count, SUM(duration_seconds) as total_duration FROM study_sessions WHERE user_id = ?', (user_id,))
+            # Only count non-quiz study sessions to prevent double-counting quizzes
+            cursor.execute('SELECT COUNT(*) as session_count, SUM(duration_seconds) as total_duration FROM study_sessions WHERE user_id = ? AND session_type != "quiz"', (user_id,))
             session_row = cursor.fetchone()
-            session_count = session_row["session_count"] or 0
-            session_seconds = session_row["total_duration"] or 0
+            sql_count = session_row["session_count"] or 0
+            sql_seconds = session_row["total_duration"] or 0
+            if session_count == 0:
+                session_count = sql_count
+                session_seconds = sql_seconds
 
             # If no manual sessions logged, estimate study time from quizzes (approx 90s per quiz)
             if session_seconds == 0 and stats["total_quizzes"] > 0:
@@ -552,10 +683,10 @@ class StudyTracker:
 
             study_time_minutes = round(session_seconds / 60, 1)
 
-            # Mastered topics count (accuracy >= 80% with at least 1 attempt)
+            # Mastered topics count (accuracy >= 80% with at least 3 attempts)
             mastered_count = sum(1 for t in stats["topic_breakdown"] if t.get("status") == "Mastered")
 
-            # Total study activities
+            # Total distinct study activities: quizzes taken + distinct study sessions
             total_activities = stats["total_quizzes"] + session_count
 
         return {

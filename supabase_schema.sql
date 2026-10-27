@@ -117,27 +117,31 @@ CREATE POLICY "Users can update own progress"
     ON public.study_progress FOR UPDATE 
     USING (auth.uid() = user_id);
 
--- Quiz History: Users can view and log their own quiz results only
-CREATE POLICY "Users can view own quiz history" 
-    ON public.quiz_history FOR SELECT 
-    USING (auth.uid() = user_id);
+-- Allow service_role to bypass all RLS policies
+CREATE POLICY "Service role full access to profiles" ON public.profiles FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access to study_sessions" ON public.study_sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access to study_progress" ON public.study_progress FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access to quiz_history" ON public.quiz_history FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access to user_preferences" ON public.user_preferences FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY "Users can insert own quiz history" 
-    ON public.quiz_history FOR INSERT 
-    WITH CHECK (auth.uid() = user_id);
+-- Allow authenticated and anon clients to insert/read quiz and study progress
+CREATE POLICY "Allow anon insert to quiz_history" ON public.quiz_history FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow anon select from quiz_history" ON public.quiz_history FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow anon insert to study_sessions" ON public.study_sessions FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow anon select from study_sessions" ON public.study_sessions FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow anon insert to study_progress" ON public.study_progress FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow anon select from study_progress" ON public.study_progress FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow anon update to study_progress" ON public.study_progress FOR UPDATE TO anon, authenticated USING (true);
+CREATE POLICY "Allow anon insert to profiles" ON public.profiles FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow anon select from profiles" ON public.profiles FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow anon update to profiles" ON public.profiles FOR UPDATE TO anon, authenticated USING (true);
 
--- User Preferences: Users can manage their own preferences
-CREATE POLICY "Users can view own preferences" 
-    ON public.user_preferences FOR SELECT 
-    USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own preferences" 
-    ON public.user_preferences FOR INSERT 
-    WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own preferences" 
-    ON public.user_preferences FOR UPDATE 
-    USING (auth.uid() = user_id);
+-- Optional migration commands to allow guest/demo user persistence without foreign key errors:
+-- ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
+-- ALTER TABLE public.study_sessions DROP CONSTRAINT IF EXISTS study_sessions_user_id_fkey;
+-- ALTER TABLE public.study_progress DROP CONSTRAINT IF EXISTS study_progress_user_id_fkey;
+-- ALTER TABLE public.quiz_history DROP CONSTRAINT IF EXISTS quiz_history_user_id_fkey;
+-- ALTER TABLE public.user_preferences DROP CONSTRAINT IF EXISTS user_preferences_user_id_fkey;
 
 -- =========================================================================
 -- AUTOMATIC PROFILE INITIALIZATION TRIGGER

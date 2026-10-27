@@ -644,7 +644,7 @@ class StudyAgent:
                 f"   • Why was Option A incorrect? Sprints are short timeboxes (1-4 weeks), NOT long multi-year plans.\n"
                 f"   • Remember the INVEST criteria for user stories: Independent, Negotiable, Valuable, Estimable, Small, Testable.\n\n"
                 f"3. **Self-Testing (5 mins):**\n"
-                f"   • Run `/quiz` right here in Telegram to re-test yourself and boost your accuracy score above 70%!"
+                f"   • Take another active recall challenge in the Interactive Quiz tab to re-test yourself and boost your accuracy score above 70%!"
             )
 
         return "Study Agent is running. Connect your GEMINI_API_KEY via /key <your_key> for custom generation."
@@ -1189,7 +1189,7 @@ Respond in JSON format:
         if not weak_topics:
             return {
                 "status": "all_good",
-                "message": "🎉 Great work! You have no weak topics below 70% accuracy. Take another quiz with /quiz to keep testing yourself!",
+                "message": "🎉 Great work! You have no weak topics below 70% accuracy. Take another quiz in the Interactive Quiz tab to keep testing yourself!",
                 "topics": []
             }
 

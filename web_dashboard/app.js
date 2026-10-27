@@ -383,12 +383,18 @@ function editOtpEmail() {
     }
 }
 
-// Quick sandbox demo login
+// Quick sandbox demo login with isolated guest UUID
 async function loginAsDemoUser() {
-    currentUserId = "alex_scholar";
+    let guestId = localStorage.getItem("study_guest_id");
+    if (!guestId || guestId === "alex_scholar" || guestId === "default_student") {
+        const rand = (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).substring(2, 10));
+        guestId = `guest_${rand}`;
+        localStorage.setItem("study_guest_id", guestId);
+    }
+    currentUserId = guestId;
     localStorage.setItem("study_user_id", currentUserId);
-    showToast("Logged in as Demo Student. Your study vault is active!", "success");
-    await onUserAuthenticated({ id: currentUserId, email: "alex@studyagent.ai" });
+    showToast("Logged in as Guest Student. Your private study vault is active!", "success");
+    await onUserAuthenticated({ id: currentUserId, email: `${currentUserId}@studyagent.ai` });
 }
 
 // Logout
@@ -844,7 +850,8 @@ async function submitAnswer(quizId, selectedLetter, selectedText, selectedBtn) {
         // Refresh stats automatically
         loadDashboardOverview();
     } catch (e) {
-        showToast("Error evaluating answer.", "error");
+        showToast("Error evaluating answer. Please try again.", "error");
+        document.querySelectorAll(".option-btn").forEach(btn => btn.disabled = false);
     }
 }
 
@@ -858,8 +865,14 @@ async function loadTopics() {
         const selectFlashcard = document.getElementById("select-flashcard-topic");
         const topicList = document.getElementById("topic-list");
 
-        if (selectQuiz) selectQuiz.innerHTML = '<option value="">🎯 Auto-Pick Topic</option>';
-        if (selectFlashcard) selectFlashcard.innerHTML = '<option value="Agile Methodology">Agile Methodology</option>';
+        if (selectQuiz) {
+            selectQuiz.innerHTML = '<option value="">🎯 Auto-Pick Topic</option>';
+            selectQuiz.onchange = () => loadNewQuiz();
+        }
+        if (selectFlashcard) {
+            selectFlashcard.innerHTML = '<option value="Agile Methodology">Agile Methodology</option>';
+            selectFlashcard.onchange = () => loadFlashcards();
+        }
         if (topicList) topicList.innerHTML = '';
 
         if (!topics || topics.length === 0) {
@@ -899,43 +912,62 @@ async function loadTopics() {
 
 let currentViewerDoc = null;
 let currentDeleteTarget = "";
+let allVaultDocuments = [];
 
 async function loadVaultDocuments() {
     try {
         const res = await fetch(`/api/vault/documents?user_id=${encodeURIComponent(currentUserId)}`);
         const docs = await res.json();
-        const docList = document.getElementById("doc-list");
-        if (!docList) return;
-
-        if (!docs || docs.length === 0) {
-            docList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No private files uploaded yet. Drag & drop files or folders above!</div>';
-            return;
-        }
-
-        docList.innerHTML = docs.map(d => {
-            const privacyIcon = d.is_private ? "🔒" : "🌐";
-            const privacyLabel = d.is_private ? `Private to ${currentUserId}` : "Shared Library";
-            const chunkVal = d.chunk_count != null ? d.chunk_count : (d.chunks != null ? d.chunks : 0);
-            const encName = encodeURIComponent(d.filename);
-            return `
-                <div class="doc-item">
-                    <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
-                        <div class="doc-icon">${getFileIcon(d.filename)}</div>
-                        <div class="doc-meta" style="min-width: 0;">
-                            <div class="doc-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;" title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</div>
-                            <div class="doc-sub">${privacyIcon} ${privacyLabel} • ${chunkVal} chunks</div>
-                        </div>
-                    </div>
-                    <div class="doc-actions">
-                        <button class="doc-btn doc-btn-view" onclick="openDocViewer('${encName}')" title="View document content & chunks">👁️ View</button>
-                        <button class="doc-btn doc-btn-delete" onclick="promptDeleteDoc('${encName}')" title="Delete from vault">🗑️ Delete</button>
-                    </div>
-                </div>
-            `;
-        }).join("");
+        allVaultDocuments = docs || [];
+        renderFilteredVaultDocs(allVaultDocuments);
     } catch (e) {
         console.error("Vault docs error:", e);
     }
+}
+
+function filterVaultDocuments(query) {
+    const q = (query || "").toLowerCase().trim();
+    if (!q) {
+        renderFilteredVaultDocs(allVaultDocuments);
+        return;
+    }
+    const filtered = allVaultDocuments.filter(d => 
+        (d.filename && d.filename.toLowerCase().includes(q)) ||
+        (d.topics && Array.isArray(d.topics) && d.topics.some(t => t.toLowerCase().includes(q)))
+    );
+    renderFilteredVaultDocs(filtered);
+}
+
+function renderFilteredVaultDocs(docs) {
+    const docList = document.getElementById("doc-list");
+    if (!docList) return;
+
+    if (!docs || docs.length === 0) {
+        docList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No matching documents found.</div>';
+        return;
+    }
+
+    docList.innerHTML = docs.map(d => {
+        const privacyIcon = d.is_private ? "🔒" : "🌐";
+        const privacyLabel = d.is_private ? `Private to ${currentUserId}` : "Shared Library";
+        const chunkVal = d.chunk_count != null ? d.chunk_count : (d.chunks != null ? d.chunks : 0);
+        const encName = encodeURIComponent(d.filename);
+        return `
+            <div class="doc-item">
+                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
+                    <div class="doc-icon">${getFileIcon(d.filename)}</div>
+                    <div class="doc-meta" style="min-width: 0;">
+                        <div class="doc-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;" title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</div>
+                        <div class="doc-sub">${privacyIcon} ${privacyLabel} • ${chunkVal} chunks</div>
+                    </div>
+                </div>
+                <div class="doc-actions">
+                    <button class="doc-btn doc-btn-view" onclick="openDocViewer('${encName}')" title="View document content & chunks">👁️ View</button>
+                    <button class="doc-btn doc-btn-delete" onclick="promptDeleteDoc('${encName}')" title="Delete from vault">🗑️ Delete</button>
+                </div>
+            </div>
+        `;
+    }).join("");
 }
 
 function getFileIcon(filename) {
@@ -1032,7 +1064,15 @@ function startQuizFromViewer() {
     if (currentViewerDoc && currentViewerDoc.topics && currentViewerDoc.topics.length) {
         const topicSelect = document.getElementById("select-quiz-topic");
         if (topicSelect) {
-            topicSelect.value = currentViewerDoc.topics[0];
+            const targetTopic = currentViewerDoc.topics[0];
+            const hasOption = Array.from(topicSelect.options).some(o => o.value === targetTopic);
+            if (!hasOption) {
+                const opt = document.createElement("option");
+                opt.value = targetTopic;
+                opt.innerText = targetTopic;
+                topicSelect.appendChild(opt);
+            }
+            topicSelect.value = targetTopic;
         }
     }
     loadNewQuiz();
@@ -1042,12 +1082,20 @@ function startFlashcardsFromViewer() {
     closeModal("modal-doc-viewer");
     switchTab("flashcards");
     if (currentViewerDoc && currentViewerDoc.topics && currentViewerDoc.topics.length) {
-        const topicInput = document.getElementById("input-flashcard-topic");
-        if (topicInput) {
-            topicInput.value = currentViewerDoc.topics[0];
+        const topicSelect = document.getElementById("select-flashcard-topic");
+        if (topicSelect) {
+            const targetTopic = currentViewerDoc.topics[0];
+            const hasOption = Array.from(topicSelect.options).some(o => o.value === targetTopic);
+            if (!hasOption) {
+                const opt = document.createElement("option");
+                opt.value = targetTopic;
+                opt.innerText = targetTopic;
+                topicSelect.appendChild(opt);
+            }
+            topicSelect.value = targetTopic;
         }
     }
-    generateFlashcards();
+    loadFlashcards();
 }
 
 function confirmDeleteFromViewer() {
@@ -1505,14 +1553,52 @@ function flipCard() {
 
 function nextFlashcard() {
     if (!currentFlashcards.length) return;
+    const cardEl = document.getElementById("flashcard-card");
+    if (cardEl && (cardEl.classList.contains("is-flipped") || cardEl.classList.contains("flipped"))) {
+        cardEl.style.transition = "none";
+        cardEl.classList.remove("is-flipped", "flipped");
+        void cardEl.offsetHeight;
+        setTimeout(() => { if (cardEl) cardEl.style.transition = ""; }, 40);
+    }
     currentFlashcardIndex = (currentFlashcardIndex + 1) % currentFlashcards.length;
     renderFlashcard();
 }
 
 function prevFlashcard() {
     if (!currentFlashcards.length) return;
+    const cardEl = document.getElementById("flashcard-card");
+    if (cardEl && (cardEl.classList.contains("is-flipped") || cardEl.classList.contains("flipped"))) {
+        cardEl.style.transition = "none";
+        cardEl.classList.remove("is-flipped", "flipped");
+        void cardEl.offsetHeight;
+        setTimeout(() => { if (cardEl) cardEl.style.transition = ""; }, 40);
+    }
     currentFlashcardIndex = (currentFlashcardIndex - 1 + currentFlashcards.length) % currentFlashcards.length;
     renderFlashcard();
+}
+
+async function rateFlashcard(rating) {
+    if (!currentFlashcards.length) return;
+    const card = currentFlashcards[currentFlashcardIndex];
+    const toastMsg = rating === 'easy' ? "Marked as Mastered! 🌟" : (rating === 'good' ? "Good recall! 👍" : "Queued for review 🔄");
+    showToast(toastMsg, "info");
+
+    try {
+        const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
+        fetch("/api/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_id: uid,
+                session_type: "flashcards",
+                topic: card.topic || "General",
+                duration_seconds: 40,
+                details: `Rated [${rating.toUpperCase()}]: ${(card.front || "").slice(0, 45)}`
+            })
+        }).then(() => loadDashboardOverview()).catch(() => {});
+    } catch (e) {}
+
+    nextFlashcard();
 }
 
 // Global keyboard navigation for 3D Flashcards (Space/Enter to flip, Left/Right arrow keys to navigate)
@@ -1623,13 +1709,15 @@ function closeModal(modalId) {
 
 function formatMarkdown(text) {
     if (!text) return "";
-    return text
-        .replace(/### (.*?)\n/g, '<h4 style="margin: 0.9rem 0 0.4rem; color: var(--text-primary);">$1</h4>')
-        .replace(/## (.*?)\n/g, '<h3 style="margin: 1.1rem 0 0.5rem; color: var(--text-primary);">$1</h3>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n\n/g, '<p style="margin-bottom: 0.75rem;"></p>')
-        .replace(/\n/g, '<br>');
+    let safe = escapeHtml(text);
+    safe = safe.replace(/^### (.*?)$/gm, '<h4 style="margin: 0.9rem 0 0.4rem; color: var(--text-primary); font-weight: 600;">$1</h4>');
+    safe = safe.replace(/^## (.*?)$/gm, '<h3 style="margin: 1.1rem 0 0.5rem; color: var(--text-primary); font-weight: 700;">$1</h3>');
+    safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    safe = safe.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    safe = safe.replace(/^[•\-\*] (.*?)$/gm, '<li style="margin-left: 1.3rem; margin-bottom: 0.35rem; list-style-type: disc;">$1</li>');
+    safe = safe.replace(/\n\n/g, '<p style="margin-bottom: 0.75rem;"></p>');
+    safe = safe.replace(/\n/g, '<br>');
+    return safe;
 }
 
 function escapeHtml(str) {

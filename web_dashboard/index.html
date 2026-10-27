@@ -389,6 +389,9 @@
                         </div>
 
                         <div class="vault-sections-container">
+                            <div class="vault-search-container" style="margin-bottom: 0.9rem;">
+                                <input type="text" id="vault-search-input" class="input-text" placeholder="🔍 Filter documents by name or topic..." oninput="filterVaultDocuments(this.value)" style="font-size: 0.85rem; padding: 0.55rem 0.9rem;">
+                            </div>
                             <h4 class="vault-subheading">📄 Indexed Documents</h4>
                             <div class="doc-list" id="doc-list" style="margin-bottom: 1.2rem;">
                                 <!-- Populated dynamically -->
@@ -476,6 +479,12 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="flashcard-rating-actions" style="display: flex; gap: 0.6rem; justify-content: center; margin: 1.2rem 0 0.8rem;">
+                        <button type="button" class="btn btn-sm btn-danger" onclick="rateFlashcard('hard')" title="Review this card soon">🔴 Hard / Forgot</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="rateFlashcard('good')" title="Good retention">🟡 Good Recall</button>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="rateFlashcard('easy')" title="Fully mastered">🟢 Mastered (+1)</button>
                     </div>
 
                     <div class="flashcard-nav">
@@ -730,7 +739,7 @@
                 <!-- Topic tags populated dynamically -->
             </div>
 
-            <div class="doc-viewer-body" id="doc-viewer-body" style="max-height: 50vh; overflow-y: auto; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; font-size: 0.9rem; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap;">
+            <div class="doc-viewer-body" id="doc-viewer-body" style="max-height: 50vh; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap;">
                 Loading document content...
             </div>
 
