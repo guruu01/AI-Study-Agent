@@ -836,7 +836,7 @@ async function loadTopics() {
         const topicList = document.getElementById("topic-list");
 
         if (selectQuiz) selectQuiz.innerHTML = '<option value="">🎯 Auto-Pick Topic</option>';
-        if (selectFlashcard) selectFlashcard.innerHTML = '';
+        if (selectFlashcard) selectFlashcard.innerHTML = '<option value="Agile Methodology">Agile Methodology</option>';
         if (topicList) topicList.innerHTML = '';
 
         if (!topics || topics.length === 0) {
@@ -854,7 +854,7 @@ async function loadTopics() {
                 selectQuiz.appendChild(opt1);
             }
 
-            if (selectFlashcard) {
+            if (selectFlashcard && t.topic.toLowerCase() !== "agile methodology") {
                 const opt2 = document.createElement("option");
                 opt2.value = t.topic;
                 opt2.innerText = shortTitle;
@@ -1082,14 +1082,24 @@ async function summarizeChapter() {
 // --- 3D FLASHCARDS ---
 async function loadFlashcards() {
     const topicSelect = document.getElementById("select-flashcard-topic");
-    let topic = (topicSelect && topicSelect.value) ? topicSelect.value : "";
-    if (!topic || topic === "undefined") {
-        topic = "Agile Methodology";
-    }
+    let topic = (topicSelect && topicSelect.value && topicSelect.value.trim()) ? topicSelect.value.trim() : "Agile Methodology";
+
     const frontText = document.getElementById("card-front-text");
+    const backText = document.getElementById("card-back-text");
+    const takeawayText = document.getElementById("card-takeaway-text");
+    const indexLabel = document.getElementById("flashcard-index");
+    const flashcardEl = document.getElementById("flashcard-card");
     const uid = currentUserId && currentUserId.trim() ? currentUserId : (localStorage.getItem("study_user_id") || "default_student");
 
+    if (flashcardEl) {
+        flashcardEl.classList.remove("is-flipped");
+        flashcardEl.classList.remove("flipped");
+    }
+
     if (frontText) frontText.innerHTML = '<span class="loading-pulse">Generating 3D recall cards...</span>';
+    if (backText) backText.innerText = "Retrieving key concepts and high-yield definitions...";
+    if (takeawayText) takeawayText.innerText = "Memory Hook: Preparing active recall prompts...";
+    if (indexLabel) indexLabel.innerText = "Loading...";
 
     try {
         const res = await fetch("/api/flashcards", {
@@ -1097,6 +1107,9 @@ async function loadFlashcards() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ topic: topic, count: 5, user_id: uid })
         });
+        if (!res.ok) {
+            throw new Error(`HTTP error ${res.status}`);
+        }
         const data = await res.json();
         currentFlashcards = (data && data.flashcards && data.flashcards.length) ? data.flashcards : [];
         currentFlashcardIndex = 0;
@@ -1105,6 +1118,9 @@ async function loadFlashcards() {
     } catch (e) {
         console.error("Flashcards error:", e);
         if (frontText) frontText.innerText = "Error loading flashcard deck. Click 'Generate Decks' to retry.";
+        if (backText) backText.innerText = "Please check your network or backend connection.";
+        if (takeawayText) takeawayText.innerText = "Memory Hook: Active recall works best with consistent review.";
+        if (indexLabel) indexLabel.innerText = "Error";
     }
 }
 
@@ -1115,7 +1131,10 @@ function renderFlashcard() {
     const indexLabel = document.getElementById("flashcard-index");
     const flashcardEl = document.getElementById("flashcard-card");
 
-    if (flashcardEl) flashcardEl.classList.remove("flipped");
+    if (flashcardEl) {
+        flashcardEl.classList.remove("is-flipped");
+        flashcardEl.classList.remove("flipped");
+    }
 
     if (!currentFlashcards || !currentFlashcards.length) {
         if (frontText) frontText.innerText = "No flashcards generated for this topic yet. Click 'Generate Decks' to create cards!";
@@ -1138,7 +1157,10 @@ function renderFlashcard() {
 
 function flipCard() {
     const card = document.getElementById("flashcard-card");
-    if (card) card.classList.toggle("flipped");
+    if (card) {
+        card.classList.toggle("is-flipped");
+        card.classList.toggle("flipped");
+    }
 }
 
 function nextFlashcard() {
@@ -1152,6 +1174,24 @@ function prevFlashcard() {
     currentFlashcardIndex = (currentFlashcardIndex - 1 + currentFlashcards.length) % currentFlashcards.length;
     renderFlashcard();
 }
+
+// Global keyboard navigation for 3D Flashcards (Space/Enter to flip, Left/Right arrow keys to navigate)
+document.addEventListener("keydown", (e) => {
+    const flashcardTab = document.getElementById("tab-flashcards");
+    if (!flashcardTab || !flashcardTab.classList.contains("active")) return;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+
+    if (e.code === "Space" || e.code === "Enter") {
+        e.preventDefault();
+        flipCard();
+    } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        nextFlashcard();
+    } else if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        prevFlashcard();
+    }
+});
 
 // --- REVISION ROADMAP ---
 async function loadRevisionData() {
