@@ -194,6 +194,7 @@ class RAGEngine:
                     "topic": k,
                     "files": list(v["files"]),
                     "chunk_count": v["chunk_count"],
+                    "count": v["chunk_count"],
                     "is_private": v["is_private"]
                 }
                 for k, v in topics.items()
@@ -241,6 +242,7 @@ class RAGEngine:
                     "filename": k,
                     "topics": list(v["topics"]),
                     "chunk_count": v["chunk_count"],
+                    "chunks": v["chunk_count"],
                     "owner": v["owner"],
                     "is_private": v["is_private"],
                     "privacy_label": "🔒 Private to You" if v["is_private"] else "🌐 Shared Library"

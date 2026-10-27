@@ -877,7 +877,8 @@ async function loadTopics() {
             if (topicList) {
                 const item = document.createElement("div");
                 item.className = "topic-item";
-                item.innerHTML = `<span>📌 ${escapeHtml(t.topic)}</span> <span class="chunk-badge">${t.count} chunks</span>`;
+                const countVal = t.chunk_count != null ? t.chunk_count : (t.count != null ? t.count : 0);
+                item.innerHTML = `<span>📌 ${escapeHtml(t.topic)}</span> <span class="chunk-badge">${countVal} chunks</span>`;
                 topicList.appendChild(item);
             }
         });
@@ -901,12 +902,13 @@ async function loadVaultDocuments() {
         docList.innerHTML = docs.map(d => {
             const privacyIcon = d.is_private ? "🔒" : "🌐";
             const privacyLabel = d.is_private ? `Private to ${currentUserId}` : "Shared Library";
+            const chunkVal = d.chunk_count != null ? d.chunk_count : (d.chunks != null ? d.chunks : 0);
             return `
                 <div class="doc-item">
                     <div class="doc-icon">${getFileIcon(d.filename)}</div>
                     <div class="doc-meta">
                         <div class="doc-title">${escapeHtml(d.filename)}</div>
-                        <div class="doc-sub">${privacyIcon} ${privacyLabel} • ${d.chunks} chunks</div>
+                        <div class="doc-sub">${privacyIcon} ${privacyLabel} • ${chunkVal} chunks</div>
                     </div>
                 </div>
             `;
@@ -977,8 +979,9 @@ async function handleFileUpload(event) {
         });
         const result = await res.json();
 
+        const indexedCount = result.chunks_indexed != null ? result.chunks_indexed : (result.indexed_count != null ? result.indexed_count : 0);
         if (progressBar) progressBar.style.width = "100%";
-        if (statusText) statusText.innerText = `Success! Indexed ${result.chunks_indexed} chunks.`;
+        if (statusText) statusText.innerText = `Success! Indexed ${indexedCount} chunks.`;
 
         showToast(`Indexed ${file.name} successfully into your private vault!`, "success");
 
@@ -1016,7 +1019,8 @@ async function handleTextIngest() {
             body: JSON.stringify({ title, text, user_id: currentUserId })
         });
         const result = await res.json();
-        showToast(`Notes stored in private vault! Indexed ${result.chunks_indexed} chunks.`, "success");
+        const indexedCount = result.chunks_indexed != null ? result.chunks_indexed : (result.indexed_count != null ? result.indexed_count : 0);
+        showToast(`Notes stored in private vault! Indexed ${indexedCount} chunks.`, "success");
 
         if (titleInput) titleInput.value = "";
         if (contentInput) contentInput.value = "";
