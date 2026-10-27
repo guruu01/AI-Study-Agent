@@ -2,9 +2,205 @@ import os
 import json
 import uuid
 import re
+import random
 from typing import Dict, Any, List, Optional
 from backend.rag_engine import RAGEngine
 from backend.tracker import StudyTracker
+
+QUESTION_BANK = [
+    {
+        "topic": "What is a Sprint?",
+        "question": "What is the defining characteristic of a Sprint in the Scrum framework?",
+        "correct": "A fixed timeboxed period (typically 1 to 4 weeks) where a team works to complete planned tasks and deliver a potentially shippable increment",
+        "distractors": [
+            "A flexible 6-month product release milestone that expands as scope grows",
+            "A continuous delivery pipeline without timeboxes or planned task lists",
+            "An annual performance review cycle for evaluating developers"
+        ],
+        "explanation": "In Scrum, a Sprint is a fixed timebox of 1 to 4 weeks during which the team produces a working product increment. Sprints have consistent durations, and sprint goals are protected from mid-sprint disruption.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    {
+        "topic": "Scrum Roles:",
+        "question": "What is the primary responsibility of the Product Owner in Scrum?",
+        "correct": "Defining the product vision, managing the Product Backlog, and prioritizing features based on business value",
+        "distractors": [
+            "Coaching the team on Scrum ceremonies and removing daily blockers",
+            "Writing production code, unit tests, and designing database schemas",
+            "Managing developer salaries, clock-in times, and annual bonuses"
+        ],
+        "explanation": "The Product Owner is the single individual responsible for maximizing the value of the product and managing the Product Backlog. Coaching and removing blockers is the Scrum Master's role.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    {
+        "topic": "Scrum Roles:",
+        "question": "How is the Scrum Master defined in the Agile methodology?",
+        "correct": "A servant-leader who coaches the team, facilitates ceremonies, and removes impediments (blockers)",
+        "distractors": [
+            "A hierarchical manager with command-and-control authority over software developers",
+            "The corporate sales liaison who signs commercial contracts with customers",
+            "A dedicated QA lead responsible for finding code defects before release"
+        ],
+        "explanation": "The Scrum Master is a servant-leader for the Scrum Team. They do not manage developers hierarchically; instead, they coach the team on Scrum theory and clear impediments hindering progress.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    {
+        "topic": "Scrum Roles:",
+        "question": "In Scrum, who is responsible for deciding HOW to turn selected Product Backlog items into increments of value?",
+        "correct": "The Developers (Development Team), because they are self-managing and cross-functional",
+        "distractors": [
+            "The Project Management Office (PMO) through daily task assignments",
+            "External stakeholders and customers during the daily standup",
+            "The Scrum Master acting as the technical software architect"
+        ],
+        "explanation": "No one tells the Developers how to turn Product Backlog items into Increments of value. They are self-managing, meaning they internally decide who does what, when, and how.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 2: The Scrum Framework)"
+    },
+    {
+        "topic": "2. Daily Scrum (Standup)",
+        "question": "Which three questions are addressed by each team member during the 15-minute Daily Scrum?",
+        "correct": "What did I accomplish yesterday? What will I work on today? Are there any blockers in my way?",
+        "distractors": [
+            "What is the company profit? Who is falling behind schedule? When is the next demo?",
+            "How many story points did I complete? Who caused the latest bug? What is my task rating?",
+            "What is the 5-year strategy? Are stakeholders satisfied? When will our team expand?"
+        ],
+        "explanation": "The Daily Scrum is a 15-minute timeboxed daily meeting for the developers to synchronize activities, inspect progress toward the Sprint Goal, and identify blockers.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    {
+        "topic": "Chapter 3: Scrum Ceremonies (Events)",
+        "question": "What is the key difference between a Sprint Review and a Sprint Retrospective?",
+        "correct": "The Sprint Review inspects the shippable increment with stakeholders, while the Retrospective inspects team processes, relationships, and internal improvements",
+        "distractors": [
+            "The Review is for engineers only, while the Retrospective is for external customers",
+            "The Review plans the next sprint, while the Retrospective estimates story points",
+            "There is no difference; they are duplicate terms for the same event"
+        ],
+        "explanation": "Sprint Review focuses on the product (demonstrating working software to stakeholders and getting feedback). Sprint Retrospective focuses on the team itself (inspecting people, relationships, processes, and tools).",
+        "grounding_source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    {
+        "topic": "Chapter 3: Scrum Ceremonies (Events)",
+        "question": "What is the primary output and purpose of Sprint Planning?",
+        "correct": "To establish a clear Sprint Goal and determine which Product Backlog items the team commits to deliver in the Sprint Backlog",
+        "distractors": [
+            "To negotiate developer salaries and assign individual daily performance scores",
+            "To complete all testing and deployment for the entire year's release roadmap",
+            "To write the complete marketing press release and commercial invoice"
+        ],
+        "explanation": "Sprint Planning initiates the Sprint by laying out the work to be performed. The collaborative result is the Sprint Goal and the agreed Sprint Backlog.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 3: Scrum Ceremonies)"
+    },
+    {
+        "topic": "Product Backlog vs. Sprint Backlog",
+        "question": "How does the Sprint Backlog differ from the Product Backlog?",
+        "correct": "The Product Backlog is the master emergent list of all desired features, while the Sprint Backlog is the subset of items committed for the current Sprint",
+        "distractors": [
+            "The Sprint Backlog belongs to marketing, while the Product Backlog belongs to customers",
+            "The Sprint Backlog lasts for several years, while the Product Backlog changes hourly",
+            "The Product Backlog only lists bugs, while the Sprint Backlog lists new features"
+        ],
+        "explanation": "The Product Backlog is the emergent, ordered single source of requirements for any product changes. The Sprint Backlog is the set of items selected for execution in the current sprint, plus the delivery plan.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    {
+        "topic": "Definition of Done (DoD)",
+        "question": "In Scrum, what is the crucial distinction between the 'Definition of Done' (DoD) and 'Acceptance Criteria'?",
+        "correct": "DoD applies universally across all product backlog items to guarantee quality standards, while Acceptance Criteria are specific to an individual user story",
+        "distractors": [
+            "DoD is written by the customer, while Acceptance Criteria are written by the CEO",
+            "DoD only applies to bug fixes, while Acceptance Criteria only apply to greenfield features",
+            "There is no distinction; both phrases refer to unit test code coverage"
+        ],
+        "explanation": "The Definition of Done is a shared formal definition of quality that every product backlog item must satisfy to become a shippable increment. In contrast, Acceptance Criteria define unique scenario requirements specific to an individual user story.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    {
+        "topic": "User Stories & The INVEST Criteria",
+        "question": "In the INVEST framework for quality User Stories, what does the letter 'I' stand for?",
+        "correct": "Independent (the story can be developed and delivered without tight coupling to others)",
+        "distractors": [
+            "Immediate (must be completed within 24 hours)",
+            "Immutable (cannot be changed once written)",
+            "Intricate (contains complex technical algorithms)"
+        ],
+        "explanation": "In the INVEST acronym (Independent, Negotiable, Valuable, Estimable, Small, Testable), 'I' stands for Independent. Avoiding tight coupling makes planning, prioritization, and release independent.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    {
+        "topic": "User Stories & The INVEST Criteria",
+        "question": "In the INVEST criteria, why must a User Story be 'Negotiable'?",
+        "correct": "Because it is an invitation for conversation between the Product Owner and developers, not a rigid specification",
+        "distractors": [
+            "Because the price of the software can be bargained with customers",
+            "Because team members can choose to skip testing if they disagree",
+            "Because it allows developers to rewrite the feature without Product Owner approval"
+        ],
+        "explanation": "A user story is not a rigid contract. It is negotiable because the team and the PO collaborate to discuss implementation details and refine acceptance criteria as work progresses.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    {
+        "topic": "Estimation & Velocity",
+        "question": "What are Story Points primarily used for by Agile teams?",
+        "correct": "To relatively estimate the effort, complexity, and uncertainty of a user story, rather than tracking exact calendar hours",
+        "distractors": [
+            "To calculate developer hourly bonuses and salary deductions",
+            "To measure the exact number of lines of code written",
+            "To calculate the retail dollar price of a software feature"
+        ],
+        "explanation": "Story Points represent relative size and complexity. Teams use them to estimate effort without getting bogged down in calendar hours, helping calculate team Velocity across sprints.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    {
+        "topic": "Estimation & Velocity",
+        "question": "What is the primary function of a Sprint Burndown Chart?",
+        "correct": "To visually represent work remaining versus time, showing if the team is on track to achieve the Sprint Goal",
+        "distractors": [
+            "To show individual developer clock-in and clock-out times",
+            "To track server cloud compute costs per day",
+            "To log customer support ticket resolution times"
+        ],
+        "explanation": "A Burndown Chart plots remaining work (story points or tasks) on the Y-axis against time (sprint days) on the X-axis. A downward trend toward zero shows the sprint is progressing on schedule.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 4: Agile Artifacts and Estimation)"
+    },
+    {
+        "topic": "Chapter 5: Scrum vs. Kanban",
+        "question": "What is a major structural difference between Scrum and Kanban?",
+        "correct": "Scrum operates on fixed timeboxed sprints with prescribed roles, whereas Kanban operates on continuous flow with WIP limits and no prescribed roles",
+        "distractors": [
+            "Scrum uses sticky notes while Kanban only uses spreadsheets",
+            "Kanban requires a Scrum Master while Scrum prohibits having one",
+            "Scrum is only for hardware manufacturing, while Kanban is only for design"
+        ],
+        "explanation": "Scrum uses timeboxed sprints (1-4 weeks), prescribed roles (PO, Scrum Master, Dev Team), and ceremonies. Kanban has continuous delivery without fixed sprint boundaries, limiting Work In Progress (WIP) at each stage.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 5: Scrum vs. Kanban)"
+    },
+    {
+        "topic": "The 4 Agile Values:",
+        "question": "Which statement accurately represents one of the 4 Core Values of the Agile Manifesto?",
+        "correct": "Responding to change over following a plan",
+        "distractors": [
+            "Comprehensive documentation over working software",
+            "Contract negotiation over customer collaboration",
+            "Processes and tools over individuals and interactions"
+        ],
+        "explanation": "The 4 Agile values are: Individuals and interactions over processes and tools; Working software over comprehensive documentation; Customer collaboration over contract negotiation; and Responding to change over following a plan.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 1: Introduction to Agile Methodology)"
+    },
+    {
+        "topic": "The 4 Agile Values:",
+        "question": "According to the Agile Manifesto, why is 'Customer collaboration over contract negotiation' emphasized?",
+        "correct": "Because continuous feedback and shared understanding deliver more valuable products than rigid legal specifications",
+        "distractors": [
+            "Because contracts should be eliminated entirely from all commercial businesses",
+            "Because customers should write all the code and database queries themselves",
+            "Because development teams should never charge customers for changes in scope"
+        ],
+        "explanation": "Traditional project management relies on rigid upfront contracts that make changes difficult. Agile values ongoing collaboration with customers to discover true user needs and adjust the product iteratively.",
+        "grounding_source": "Agile_Product_Management.md (Chapter 1: Introduction to Agile Methodology)"
+    }
+]
 
 class StudyAgent:
     def __init__(self, rag_engine: RAGEngine, tracker: StudyTracker, gemini_api_key: Optional[str] = None):
@@ -13,7 +209,7 @@ class StudyAgent:
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY", "")
         self.model_name = "gemini-1.5-flash"
 
-    def _call_gemini(self, prompt: str, system_instruction: str = "") -> str:
+    def _call_gemini(self, prompt: str, system_instruction: str = "", temperature: float = 0.3) -> str:
         # 1. Groq Cloud API (Free Llama 3.3 70B - Blazing fast 500+ tok/s for 24/7 cloud hosting)
         groq_key = os.getenv("GROQ_API_KEY", "").strip()
         if groq_key:
@@ -26,7 +222,7 @@ class StudyAgent:
                         {"role": "system", "content": system_instruction or "You are an expert AI Study Agent helping students learn with high-retention active recall, grounded strictly in their own study materials."},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.3,
+                    temperature=temperature,
                     max_tokens=2048
                 )
                 return completion.choices[0].message.content
@@ -42,12 +238,15 @@ class StudyAgent:
                     model_name=self.model_name,
                     system_instruction=system_instruction or "You are an expert AI Study Agent helping students learn with high-retention active recall, grounded strictly in their own study materials."
                 )
-                response = model.generate_content(prompt)
+                response = model.generate_content(
+                    prompt,
+                    generation_config={"temperature": temperature}
+                )
                 return response.text
             except Exception as e:
                 print(f"Gemini API generation error: {e}")
 
-        # 2. Free with NO LIMITS: Local Ollama (llama3.1:8b) on GPU
+        # 3. Free with NO LIMITS: Local Ollama (llama3.1:8b) on GPU
         try:
             import requests
             full_prompt = f"System: {system_instruction}\n\n{prompt}" if system_instruction else prompt
@@ -58,7 +257,7 @@ class StudyAgent:
                     "prompt": full_prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.3
+                        "temperature": temperature
                     }
                 },
                 timeout=30
@@ -70,38 +269,80 @@ class StudyAgent:
         except Exception as e:
             print(f"Ollama local call note: {e}")
 
-        # 3. Grounded deterministic fallback (if Ollama offline)
+        # 4. Grounded deterministic fallback (if Ollama offline / no API key)
         return self._local_fallback_generation(prompt)
+
+    def _get_bank_quiz(self, user_id: str, topic: Optional[str] = None, recent_questions: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Picks an unasked question from QUESTION_BANK, dynamically shuffles options A/B/C/D,
+        and guarantees no repeat questions.
+        """
+        if recent_questions is None:
+            recent_questions = self.tracker.get_recent_questions(user_id, limit=15)
+
+        recent_set = set(q.strip().lower() for q in recent_questions if q)
+
+        # Filter by topic if specified
+        candidates = []
+        if topic:
+            t_clean = topic.strip().lower()
+            candidates = [
+                q for q in QUESTION_BANK 
+                if t_clean in q["topic"].lower() or q["topic"].lower() in t_clean or t_clean in q["question"].lower()
+            ]
+
+        # If no specific matches or no topic given, use the full bank
+        if not candidates:
+            candidates = list(QUESTION_BANK)
+
+        # Filter out questions that have been asked recently
+        unasked = [q for q in candidates if q["question"].strip().lower() not in recent_set]
+
+        # If all matching candidates were asked, search the entire question bank for unasked questions
+        if not unasked:
+            unasked = [q for q in QUESTION_BANK if q["question"].strip().lower() not in recent_set]
+
+        # If all 16 questions in the bank were asked, pick any question that is not the most recent one
+        if not unasked:
+            last_q = recent_questions[0].strip().lower() if recent_questions else ""
+            not_last = [q for q in QUESTION_BANK if q["question"].strip().lower() != last_q]
+            selected = random.choice(not_last if not_last else QUESTION_BANK)
+        else:
+            selected = random.choice(unasked)
+
+        # Dynamically shuffle options so the correct answer is randomly distributed among A, B, C, D
+        all_opts = [selected["correct"]] + list(selected["distractors"])
+        random.shuffle(all_opts)
+        letters = ["A", "B", "C", "D"]
+        options_dict = {letters[i]: all_opts[i] for i in range(4)}
+        correct_letter = letters[all_opts.index(selected["correct"])]
+
+        return {
+            "topic": selected["topic"],
+            "question": selected["question"],
+            "options": options_dict,
+            "correct_option": correct_letter,
+            "explanation": selected["explanation"],
+            "grounding_source": selected["grounding_source"]
+        }
 
     def _local_fallback_generation(self, prompt: str) -> str:
         """Fallback grounded response parser when offline or testing without key."""
         # 1. Multiple Choice Question Fallback
         if "generate 1 high-yield multiple choice question" in prompt.lower():
             # Check if prompt contains specific topic context
-            topic = "Agile Methodology"
+            topic = None
             if 'for: "' in prompt:
                 try:
                     topic = prompt.split('for: "')[1].split('"')[0]
                 except Exception:
                     pass
 
-            return json.dumps({
-                "topic": topic,
-                "question": f"According to your study notes, what is the primary purpose of {topic}?",
-                "options": {
-                    "A": "A rigid 5-year business strategy without adaptability",
-                    "B": "A structured, timeboxed iterative approach producing usable increments while enabling rapid feedback",
-                    "C": "A specialized database query optimization method",
-                    "D": "An external marketing and customer acquisition workflow"
-                },
-                "correct_option": "B",
-                "explanation": f"Based directly on your study materials on {topic}: Agile and Scrum prioritize iterative delivery, customer collaboration, and adapting to change over rigid plans. Option A is the opposite of agile principles, while C and D refer to databases and marketing.",
-                "grounding_source": f"Uploaded Notes ({topic})"
-            })
+            bank_quiz = self._get_bank_quiz(user_id="default_student", topic=topic)
+            return json.dumps(bank_quiz)
 
         # 2. ELI5 Concept Explainer Fallback
         if "explain this concept using this clear 3-step format" in prompt.lower():
-            # Extract concept and excerpts from prompt
             concept = "Sprint"
             if 'explain \'' in prompt:
                 try:
@@ -158,34 +399,66 @@ class StudyAgent:
     def generate_quiz(self, user_id: str, topic: Optional[str] = None) -> Dict[str, Any]:
         """
         Retrieves grounded notes from Qdrant and generates an active-recall MCQ.
+        Guarantees non-repeating questions across successive attempts.
         """
-        # If no topic specified, check if user has a weak topic needing revision
+        recent_questions = self.tracker.get_recent_questions(user_id, limit=15)
+
+        # Smart Topic Rotation if not explicitly chosen by the user
         if not topic:
             weak_topics = self.tracker.get_revision_topics(user_id)
-            if weak_topics:
-                topic = weak_topics[0]["topic"]
+            all_topics = self.rag.get_all_topics()
+            
+            # 65% chance to test a weak topic if user has any weak areas
+            if weak_topics and random.random() < 0.65:
+                topic = random.choice(weak_topics)["topic"]
+            elif all_topics:
+                # Rotate randomly among indexed topics for variety
+                topic = random.choice(all_topics)["topic"]
             else:
-                topics = self.rag.get_all_topics()
-                topic = topics[0]["topic"] if topics else "General Study"
+                bank_topics = list(set(q["topic"] for q in QUESTION_BANK))
+                topic = random.choice(bank_topics) if bank_topics else "Agile Methodology"
 
-        # 1. Retrieve grounded study chunks
-        chunks = self.rag.search(query=f"Core concepts, definitions, and rules about {topic}", topic_filter=topic, limit=3)
-        context_text = "\n\n".join([f"--- Source: {c['filename']} (Topic: {c['topic']}) ---\n{c['text']}" for c in chunks])
+        # Check if an LLM is available (Groq Cloud, Gemini, or local Ollama)
+        has_llm = bool(os.getenv("GROQ_API_KEY") or self.gemini_api_key)
 
-        if not context_text.strip():
-            context_text = f"Study Topic: {topic}. Essential concepts and principles."
+        quiz_data = None
 
-        # 2. Structured prompt for Gemini
-        prompt = f"""
+        if has_llm:
+            # 1. Retrieve grounded study chunks
+            chunks = self.rag.search(query=f"Core concepts, definitions, and rules about {topic}", topic_filter=topic, limit=3)
+            context_text = "\n\n".join([f"--- Source: {c['filename']} (Topic: {c['topic']}) ---\n{c['text']}" for c in chunks])
+
+            if not context_text.strip():
+                context_text = f"Study Topic: {topic}. Essential concepts and principles."
+
+            # Dynamic question angles
+            angles = [
+                "core definitions and specific purpose",
+                "practical real-world team trade-offs and decision making",
+                "roles, responsibilities, and authority boundaries",
+                "common misconceptions, anti-patterns, and pitfalls to avoid",
+                "comparing this concept with its alternatives or traditional methods"
+            ]
+            focus_angle = random.choice(angles)
+            recent_str = "\n".join([f"- {q}" for q in recent_questions[:8]]) if recent_questions else "None yet."
+
+            prompt = f"""
 Based ONLY on the following study materials retrieved from the user's uploaded documents:
 =============================
 {context_text}
 =============================
 
 Generate 1 high-yield Multiple Choice Question (MCQ) testing active recall for: "{topic}".
+FOCUS ANGLE: {focus_angle}
+
+CRITICAL ANTI-REPETITION RULE:
+The student has ALREADY recently answered the following questions:
+{recent_str}
+You MUST NOT repeat any of these questions or ask essentially the same question. Generate a fresh, unique question exploring a different facet.
+
 REQUIREMENTS:
 1. Ground the question strictly in the provided study materials. Do not invent facts outside of this context.
-2. Provide exactly 4 options labeled A, B, C, D. One correct answer and 3 plausible distractors.
+2. Provide exactly 4 options labeled A, B, C, D. One correct answer and 3 plausible distractors. Randomize which letter (A, B, C, or D) is the correct answer.
 3. Provide a clear, thorough explanation explaining why the correct answer is right and why the other options are wrong.
 4. Cite the exact file name and section in "grounding_source".
 
@@ -204,43 +477,32 @@ Respond in STRICT JSON format with this exact schema:
   "grounding_source": "Filename and section reference"
 }}
 """
-        response_text = self._call_gemini(prompt)
-        
-        # Parse JSON
-        quiz_data = {}
-        try:
-            # Extract JSON substring
-            match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if match:
-                quiz_data = json.loads(match.group(0))
-            else:
-                quiz_data = json.loads(response_text)
-        except Exception:
-            quiz_data = {
-                "topic": topic,
-                "question": f"Key concept in {topic}?",
-                "options": {
-                    "A": "Concept A",
-                    "B": "Concept B",
-                    "C": "Concept C",
-                    "D": "Concept D"
-                },
-                "correct_option": "B",
-                "explanation": "Based on your study notes.",
-                "grounding_source": "Uploaded study materials"
-            }
+            response_text = self._call_gemini(prompt, temperature=0.7)
+            try:
+                match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                parsed = json.loads(match.group(0)) if match else json.loads(response_text)
+                if parsed.get("question") and parsed.get("options") and len(parsed.get("options", {})) == 4:
+                    # Verify question is not a repeat
+                    if parsed.get("question", "").strip() not in recent_questions:
+                        quiz_data = parsed
+            except Exception:
+                pass
+
+        # If LLM unavailable or generated a repeat/invalid JSON, use the rich question bank
+        if not quiz_data:
+            quiz_data = self._get_bank_quiz(user_id=user_id, topic=topic, recent_questions=recent_questions)
 
         quiz_id = str(uuid.uuid4())[:8]
         quiz_data["quiz_id"] = quiz_id
 
-        # Save active quiz in SQLite for Telegram callback validation
+        # Save active quiz in SQLite for Telegram callback validation and anti-repetition tracking
         self.tracker.save_active_quiz(
             quiz_id=quiz_id,
             user_id=user_id,
             topic=quiz_data.get("topic", topic),
             question=quiz_data.get("question", ""),
             options_json=json.dumps(quiz_data.get("options", {})),
-            correct_option=quiz_data.get("correct_option", "B"),
+            correct_option=quiz_data.get("correct_option", "A"),
             explanation=quiz_data.get("explanation", ""),
             source_citation=quiz_data.get("grounding_source", "")
         )

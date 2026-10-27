@@ -156,3 +156,35 @@ class StudyTracker:
                     "failed_questions": failed_questions
                 })
         return weak_topics
+
+    def get_recent_questions(self, user_id: str, limit: int = 15) -> List[str]:
+        """Returns the text of recently answered or generated questions to avoid repeats."""
+        questions = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. From active_quizzes (questions generated recently)
+            cursor.execute('''
+                SELECT question FROM active_quizzes
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            ''', (user_id, limit))
+            for row in cursor.fetchall():
+                q = row["question"].strip() if row["question"] else ""
+                if q and q not in questions:
+                    questions.append(q)
+
+            # 2. From quiz_history (questions answered)
+            cursor.execute('''
+                SELECT question FROM quiz_history
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+            ''', (user_id, limit))
+            for row in cursor.fetchall():
+                q = row["question"].strip() if row["question"] else ""
+                if q and q not in questions:
+                    questions.append(q)
+
+        return questions[:limit]
+

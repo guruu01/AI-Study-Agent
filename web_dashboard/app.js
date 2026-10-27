@@ -52,21 +52,25 @@ async function loadTopics() {
         const selectFlashcard = document.getElementById("select-flashcard-topic");
         const topicList = document.getElementById("topic-list");
 
-        selectQuiz.innerHTML = '<option value="">Auto-Pick Weakest Topic</option>';
+        selectQuiz.innerHTML = '<option value="">🎯 Auto-Pick Topic</option>';
         selectFlashcard.innerHTML = '';
         topicList.innerHTML = '';
 
         topics.forEach(t => {
+            const shortTitle = t.topic.length > 25 ? t.topic.slice(0, 23) + '...' : t.topic;
             // Select dropdown options
             const opt1 = document.createElement("option");
             opt1.value = t.topic;
-            opt1.innerText = t.topic;
+            opt1.innerText = shortTitle;
+            opt1.title = t.topic;
             selectQuiz.appendChild(opt1);
 
             const opt2 = document.createElement("option");
             opt2.value = t.topic;
-            opt2.innerText = t.topic;
+            opt2.innerText = shortTitle;
+            opt2.title = t.topic;
             selectFlashcard.appendChild(opt2);
+
 
             // Vault list card
             const item = document.createElement("div");

@@ -320,9 +320,11 @@ body {
     display: flex;
     align-items: center;
     gap: 0.8rem;
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 .select-dropdown {
-    padding: 0.65rem 1rem;
+    padding: 0.65rem 0.95rem;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -330,10 +332,25 @@ body {
     font-family: inherit;
     font-size: 0.88rem;
     outline: none;
+    max-width: 240px;
+    min-width: 160px;
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.select-dropdown:hover, .select-dropdown:focus {
+    border-color: var(--primary-light);
+    background: rgba(255, 255, 255, 0.08);
 }
 .select-dropdown option {
     background: var(--bg-dark);
+    color: var(--text-primary);
+    padding: 0.5rem;
 }
+
 
 .question-stem {
     font-size: 1.25rem;
@@ -746,3 +763,67 @@ body {
 .hidden {
     display: none !important;
 }
+
+/* Responsive Layout */
+@media (max-width: 860px) {
+    body {
+        padding: 1rem 0.8rem;
+    }
+    .app-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 1.2rem;
+    }
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+    .card-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.9rem;
+    }
+    .quiz-controls {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .select-dropdown {
+        max-width: 100%;
+        width: 100%;
+    }
+    .quiz-controls .btn {
+        width: 100%;
+    }
+    .study-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.5rem;
+    }
+    .grid-2-col {
+        grid-template-columns: 1fr;
+    }
+    .flashcard-scene {
+        height: 260px;
+    }
+}
+
+@media (max-width: 480px) {
+    .brand-text h1 {
+        font-size: 1.3rem;
+    }
+    .card {
+        padding: 1.2rem 1rem;
+    }
+    .question-stem {
+        font-size: 1.05rem;
+        padding: 1rem;
+    }
+    .option-btn {
+        padding: 0.85rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
