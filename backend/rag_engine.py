@@ -16,13 +16,14 @@ class RAGEngine:
         
         # Connect to remote Qdrant or fallback to embedded local storage
         try:
-            self.client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key, timeout=3.0)
+            self.client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key, timeout=15.0)
             self.client.get_collections()
+            print(f"Connected to remote Qdrant Cloud cluster at {self.qdrant_url}")
         except Exception as e:
             local_storage = os.path.join(os.path.dirname(__file__), "..", "qdrant_data")
             os.makedirs(local_storage, exist_ok=True)
             self.client = QdrantClient(path=local_storage)
-            print(f"Connected to embedded local Qdrant storage at {local_storage}")
+            print(f"Connected to embedded local Qdrant storage at {local_storage} (Remote notice: {e})")
 
         self._ensure_collection()
 

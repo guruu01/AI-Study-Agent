@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import uuid
+import requests
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -9,6 +11,60 @@ class StudyTracker:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self._init_db()
+
+        # Supabase Cloud Database Configuration
+        self.supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+        self.supabase_key = (
+            os.getenv("SUPABASE_SERVICE_ROLE_KEY") or 
+            os.getenv("SUPABASE_ANON_KEY") or 
+            ""
+        ).strip()
+        self.supabase_enabled = bool(self.supabase_url and self.supabase_key)
+        if self.supabase_enabled:
+            print(f"Connected to Supabase PostgreSQL at {self.supabase_url}")
+        else:
+            print("Running StudyTracker with local SQLite database (Supabase not configured)")
+
+    def _to_uuid(self, user_id: str) -> str:
+        """Ensures user_id is a valid UUID for Supabase, converting text/guest IDs deterministically."""
+        if not user_id:
+            user_id = "default_student"
+        try:
+            return str(uuid.UUID(user_id))
+        except Exception:
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, user_id))
+
+    def _supabase_request(self, method: str, table: str, json_data: Any = None, params: Dict[str, Any] = None) -> Optional[Any]:
+        """Executes REST request to Supabase PostgREST endpoint with service credentials."""
+        if not self.supabase_enabled:
+            return None
+        url = f"{self.supabase_url}/rest/v1/{table}"
+        headers = {
+            "apikey": self.supabase_key,
+            "Authorization": f"Bearer {self.supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        try:
+            if method.upper() == "GET":
+                res = requests.get(url, headers=headers, params=params, timeout=6)
+            elif method.upper() == "POST":
+                res = requests.post(url, headers=headers, json=json_data, params=params, timeout=6)
+            elif method.upper() == "PATCH":
+                res = requests.patch(url, headers=headers, json=json_data, params=params, timeout=6)
+            else:
+                return None
+            if res.status_code in (200, 201, 204):
+                try:
+                    return res.json()
+                except Exception:
+                    return []
+            else:
+                print(f"Supabase REST {method} {table} response ({res.status_code}): {res.text[:200]}")
+                return None
+        except Exception as e:
+            print(f"Supabase request error ({table}): {e}")
+            return None
 
     def _get_connection(self):
         conn = sqlite3.connect(self.db_path)
@@ -127,9 +183,66 @@ class StudyTracker:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (user_id, topic, question, selected_option, correct_option, 1 if is_correct else 0, source_doc))
             conn.commit()
+
+        # Synchronize to Supabase Cloud Database if configured
+        if self.supabase_enabled:
+            uuid_str = self._to_uuid(user_id)
+            self._supabase_request("POST", "quiz_history", json_data={
+                "user_id": uuid_str,
+                "topic": topic,
+                "question": question,
+                "selected_option": selected_option,
+                "correct_option": correct_option,
+                "is_correct": bool(is_correct),
+                "source_doc": source_doc or ""
+            })
+
         return self.get_user_stats(user_id)
 
     def get_user_stats(self, user_id: str) -> Dict[str, Any]:
+        # If Supabase is connected, retrieve cloud-persisted quiz history
+        if self.supabase_enabled:
+            uuid_str = self._to_uuid(user_id)
+            rows = self._supabase_request("GET", "quiz_history", params={
+                "user_id": f"eq.{uuid_str}",
+                "select": "topic,is_correct"
+            })
+            if rows is not None and len(rows) > 0:
+                total = len(rows)
+                correct = sum(1 for r in rows if r.get("is_correct") is True or r.get("is_correct") == 1)
+                accuracy = round((correct / total * 100), 1) if total > 0 else 0.0
+
+                topic_map: Dict[str, Dict[str, int]] = {}
+                for r in rows:
+                    top = r.get("topic") or "General"
+                    if top not in topic_map:
+                        topic_map[top] = {"attempts": 0, "correct": 0}
+                    topic_map[top]["attempts"] += 1
+                    if r.get("is_correct") is True or r.get("is_correct") == 1:
+                        topic_map[top]["correct"] += 1
+
+                topics = []
+                for top, val in topic_map.items():
+                    t_attempts = val["attempts"]
+                    t_correct = val["correct"]
+                    t_acc = round((t_correct / t_attempts * 100), 1)
+                    status = "Mastered" if t_acc >= 80 else ("Reviewing" if t_acc >= 60 else "Needs Revision")
+                    topics.append({
+                        "topic": top,
+                        "attempts": t_attempts,
+                        "correct": t_correct,
+                        "accuracy": t_acc,
+                        "status": status
+                    })
+                topics.sort(key=lambda x: x["accuracy"])
+                return {
+                    "user_id": user_id,
+                    "total_quizzes": total,
+                    "correct_answers": correct,
+                    "accuracy_pct": accuracy,
+                    "topic_breakdown": topics
+                }
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # Overall totals
@@ -242,6 +355,41 @@ class StudyTracker:
     def get_or_create_profile(self, user_id: str, email: Optional[str] = None, 
                                full_name: Optional[str] = None, avatar_url: Optional[str] = None) -> Dict[str, Any]:
         """Gets user profile or creates a default one if it doesn't exist."""
+        # 1. Supabase Cloud Sync
+        if self.supabase_enabled:
+            uuid_str = self._to_uuid(user_id)
+            res = self._supabase_request("GET", "profiles", params={"id": f"eq.{uuid_str}", "select": "*"})
+            if res and len(res) > 0:
+                p = res[0]
+                patch_data = {}
+                if email and not p.get("email"):
+                    patch_data["email"] = email
+                if full_name and (not p.get("full_name") or p.get("full_name") == "Student"):
+                    patch_data["full_name"] = full_name
+                if avatar_url and not p.get("avatar_url"):
+                    patch_data["avatar_url"] = avatar_url
+                if patch_data:
+                    self._supabase_request("PATCH", "profiles", json_data=patch_data, params={"id": f"eq.{uuid_str}"})
+                    p.update(patch_data)
+                return p
+            else:
+                default_name = full_name or (email.split("@")[0].title() if email else user_id.capitalize())
+                new_profile = {
+                    "id": uuid_str,
+                    "email": email or f"{user_id}@studyagent.ai",
+                    "full_name": default_name,
+                    "avatar_url": avatar_url or "",
+                    "education_level": "Undergraduate",
+                    "field_of_study": "Computer Science",
+                    "learning_goals": "Master core concepts through active recall & spaced repetition",
+                    "preferred_theme": "dark",
+                    "preferred_language": "en"
+                }
+                res_insert = self._supabase_request("POST", "profiles", json_data=new_profile)
+                if res_insert and len(res_insert) > 0:
+                    return res_insert[0]
+
+        # 2. Local SQLite Storage Fallback
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM profiles WHERE id = ?', (user_id,))
@@ -292,6 +440,12 @@ class StudyTracker:
                 updates.append(f"{key} = ?")
                 params.append(data[key])
 
+        if self.supabase_enabled:
+            uuid_str = self._to_uuid(user_id)
+            patch_dict = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
+            if patch_dict:
+                self._supabase_request("PATCH", "profiles", json_data=patch_dict, params={"id": f"eq.{uuid_str}"})
+
         if not updates:
             return self.get_or_create_profile(user_id)
 
@@ -318,7 +472,18 @@ class StudyTracker:
             conn.commit()
             session_id = cursor.lastrowid
             cursor.execute('SELECT * FROM study_sessions WHERE id = ?', (session_id,))
-            return dict(cursor.fetchone())
+            session_data = dict(cursor.fetchone())
+
+        if self.supabase_enabled:
+            uuid_str = self._to_uuid(user_id)
+            self._supabase_request("POST", "study_sessions", json_data={
+                "user_id": uuid_str,
+                "session_type": session_type,
+                "topic": topic,
+                "duration_seconds": duration_seconds
+            })
+
+        return session_data
 
     def record_study_progress(self, user_id: str, activity_type: str, topic: str, 
                               status: str = "completed", progress_pct: int = 100):
