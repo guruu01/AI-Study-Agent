@@ -25,13 +25,19 @@
         </div>
 
         <div class="header-actions">
+            <div class="vault-badge" id="vault-user-badge">
+                <span class="vault-icon">👤</span>
+                <span class="vault-label">Vault:</span>
+                <span class="vault-id" id="display-user-id">alice</span>
+                <button class="btn-vault-switch" onclick="promptSwitchUser()" title="Switch user vault (e.g. alice, bob)">⇄ Switch</button>
+            </div>
             <div class="status-badge" id="system-status-badge">
                 <span class="status-dot"></span>
                 <span id="status-text">Qdrant Vector DB Active</span>
             </div>
             <div class="status-badge" id="model-status-badge" style="background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.35); color: #a5b4fc;">
                 <span class="status-dot" style="background: #818cf8; box-shadow: 0 0 10px #818cf8;"></span>
-                <span>🦙 Ollama Llama 3.1 (100% GPU)</span>
+                <span>🦙 Llama 3.1 & Gemini RAG</span>
             </div>
             <a href="http://localhost:5678" target="_blank" class="btn btn-primary" id="btn-open-n8n">
                 ⚡ Open n8n Workflows
@@ -172,10 +178,24 @@
                 </div>
 
                 <div class="card vault-list-card">
-                    <h2 class="card-title">Indexed Study Knowledge Base</h2>
-                    <p class="card-subtitle">Source materials currently available for grounded retrieval.</p>
-                    <div class="topic-list" id="topic-list">
-                        <!-- Loaded dynamically -->
+                    <div class="card-header" style="margin-bottom: 0.8rem;">
+                        <div>
+                            <h2 class="card-title">Knowledge Vault</h2>
+                            <p class="card-subtitle">Your private documents & shared foundational library.</p>
+                        </div>
+                        <span class="badge" id="vault-privacy-badge">🔒 Private Vault: alice</span>
+                    </div>
+
+                    <div class="vault-sections-container">
+                        <h4 class="vault-subheading">📄 Indexed Documents</h4>
+                        <div class="doc-list" id="doc-list" style="margin-bottom: 1.2rem;">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <h4 class="vault-subheading">📌 Available Topics</h4>
+                        <div class="topic-list" id="topic-list">
+                            <!-- Loaded dynamically -->
+                        </div>
                     </div>
                 </div>
             </div>

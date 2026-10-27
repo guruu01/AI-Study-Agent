@@ -406,7 +406,7 @@ class StudyAgent:
         # Smart Topic Rotation if not explicitly chosen by the user
         if not topic:
             weak_topics = self.tracker.get_revision_topics(user_id)
-            all_topics = self.rag.get_all_topics()
+            all_topics = self.rag.get_all_topics(user_id=user_id)
             
             # 65% chance to test a weak topic if user has any weak areas
             if weak_topics and random.random() < 0.65:
@@ -424,8 +424,8 @@ class StudyAgent:
         quiz_data = None
 
         if has_llm:
-            # 1. Retrieve grounded study chunks
-            chunks = self.rag.search(query=f"Core concepts, definitions, and rules about {topic}", topic_filter=topic, limit=3)
+            # 1. Retrieve grounded study chunks scoped strictly to user's private vault
+            chunks = self.rag.search(query=f"Core concepts, definitions, and rules about {topic}", user_id=user_id, topic_filter=topic, limit=3)
             context_text = "\n\n".join([f"--- Source: {c['filename']} (Topic: {c['topic']}) ---\n{c['text']}" for c in chunks])
 
             if not context_text.strip():
@@ -548,11 +548,12 @@ Respond in STRICT JSON format with this exact schema:
             "user_stats": stats
         }
 
-    def summarize_chapter(self, topic_or_chapter: str) -> Dict[str, Any]:
+    def summarize_chapter(self, topic_or_chapter: str, user_id: str = "default_student") -> Dict[str, Any]:
         """
         Retrieves relevant sections and generates a comprehensive chapter executive summary.
+        Scoped strictly to user_id's private vault and common materials.
         """
-        chunks = self.rag.search(query=f"Overview, principles, and chapters about {topic_or_chapter}", topic_filter=topic_or_chapter, limit=5)
+        chunks = self.rag.search(query=f"Overview, principles, and chapters about {topic_or_chapter}", user_id=user_id, topic_filter=topic_or_chapter, limit=5)
         context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
 
         prompt = f"""
@@ -575,11 +576,12 @@ Format with:
             "sources": list(set(c["filename"] for c in chunks))
         }
 
-    def explain_concept(self, concept: str) -> Dict[str, Any]:
+    def explain_concept(self, concept: str, user_id: str = "default_student") -> Dict[str, Any]:
         """
         Explains difficult concept in simple language (ELI5 + Analogy + Note Reference).
+        Scoped strictly to user_id's private vault and common materials.
         """
-        chunks = self.rag.search(query=concept, limit=4)
+        chunks = self.rag.search(query=concept, user_id=user_id, limit=4)
         context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
 
         prompt = f"""
@@ -601,11 +603,12 @@ Explain this concept using this clear 3-step format:
             "sources": list(set(c["filename"] for c in chunks))
         }
 
-    def generate_flashcards(self, topic: str, count: int = 5) -> Dict[str, Any]:
+    def generate_flashcards(self, topic: str, count: int = 5, user_id: str = "default_student") -> Dict[str, Any]:
         """
         Generates active-recall flashcards from user notes.
+        Scoped strictly to user_id's private vault and common materials.
         """
-        chunks = self.rag.search(query=f"Definitions, formulas, key facts about {topic}", topic_filter=topic, limit=5)
+        chunks = self.rag.search(query=f"Definitions, formulas, key facts about {topic}", user_id=user_id, topic_filter=topic, limit=5)
         context = "\n\n".join([f"[{c['filename']}]:\n{c['text']}" for c in chunks])
 
         prompt = f"""

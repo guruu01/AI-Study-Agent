@@ -71,15 +71,16 @@ class RAGEngine:
             vec[0] = 1.0
         return vec.tolist()
 
-    def index_chunks(self, chunks: List[Dict[str, Any]]) -> int:
+    def index_chunks(self, chunks: List[Dict[str, Any]], user_id: str = "common") -> int:
         """
-        Indexes a list of chunks into Qdrant collection.
+        Indexes a list of chunks into Qdrant collection tagged with user_id for vault privacy.
         """
         points = []
         for i, chunk in enumerate(chunks):
             vector = self.get_embedding(chunk["text"])
-            # Generate deterministic numeric id from chunk_id
-            point_id = int(hashlib.md5(chunk["chunk_id"].encode()).hexdigest()[:15], 16)
+            chunk_user = chunk.get("user_id") or user_id or "common"
+            # Deterministic numeric id scoped by user_id to prevent cross-user ID collisions
+            point_id = int(hashlib.md5(f"{chunk_user}:{chunk['chunk_id']}".encode()).hexdigest()[:15], 16)
             points.append(models.PointStruct(
                 id=point_id,
                 vector=vector,
@@ -87,7 +88,8 @@ class RAGEngine:
                     "chunk_id": chunk["chunk_id"],
                     "filename": chunk["filename"],
                     "topic": chunk["topic"],
-                    "text": chunk["text"]
+                    "text": chunk["text"],
+                    "user_id": chunk_user
                 }
             ))
 
@@ -101,69 +103,151 @@ class RAGEngine:
             )
         return len(points)
 
-    def search(self, query: str, topic_filter: Optional[str] = None, limit: int = 4) -> List[Dict[str, Any]]:
+    def search(self, query: str, user_id: Optional[str] = None, topic_filter: Optional[str] = None, limit: int = 4) -> List[Dict[str, Any]]:
         """
         Retrieves top-k relevant study chunks for a query.
+        Strictly enforces document privacy: user only receives their own private chunks + common library chunks.
         """
         query_vector = self.get_embedding(query)
         
-        filter_query = None
-        if topic_filter:
-            filter_query = models.Filter(
+        filter_conditions = []
+        if user_id:
+            # Allow chunks belonging to this user OR common baseline study library
+            user_filter = models.Filter(
                 should=[
-                    models.FieldCondition(
-                        key="topic",
-                        match=models.MatchText(text=topic_filter)
-                    )
+                    models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id)),
+                    models.FieldCondition(key="user_id", match=models.MatchValue(value="common")),
                 ]
             )
+            filter_conditions.append(user_filter)
+
+        if topic_filter:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="topic",
+                    match=models.MatchText(text=topic_filter)
+                )
+            )
+
+        query_filter = models.Filter(must=filter_conditions) if filter_conditions else None
 
         query_res = self.client.query_points(
             collection_name=COLLECTION_NAME,
             query=query_vector,
-            query_filter=filter_query,
+            query_filter=query_filter,
             limit=limit
         )
 
         results = []
         for hit in query_res.points:
+            p_user = hit.payload.get("user_id", "common")
+            # Strict safety post-filter: ensure no cross-user leakage
+            if user_id and p_user not in [user_id, "common"]:
+                continue
+
             results.append({
                 "score": hit.score,
                 "filename": hit.payload.get("filename", ""),
                 "topic": hit.payload.get("topic", ""),
                 "text": hit.payload.get("text", ""),
-                "chunk_id": hit.payload.get("chunk_id", "")
+                "chunk_id": hit.payload.get("chunk_id", ""),
+                "user_id": p_user,
+                "is_private": (p_user == user_id and user_id != "common")
             })
         return results
 
-    def get_all_topics(self) -> List[Dict[str, Any]]:
+    def get_all_topics(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Scrolls collection to retrieve unique topics and filenames.
+        Scrolls collection to retrieve unique topics and filenames visible to user_id.
+        Private topics belonging to other users are excluded.
         """
         try:
             scroll_result, _ = self.client.scroll(
                 collection_name=COLLECTION_NAME,
-                limit=200,
+                limit=500,
                 with_payload=True,
                 with_vectors=False
             )
             topics = {}
             for point in scroll_result:
+                p_user = point.payload.get("user_id", "common")
+                # Privacy filter: only include common materials or materials belonging to this user
+                if user_id and p_user not in [user_id, "common"]:
+                    continue
+
                 top = point.payload.get("topic", "General")
                 fn = point.payload.get("filename", "Unknown")
                 if top not in topics:
-                    topics[top] = {"topic": top, "files": set(), "chunk_count": 0}
+                    topics[top] = {
+                        "topic": top,
+                        "files": set(),
+                        "chunk_count": 0,
+                        "is_private": False
+                    }
                 topics[top]["files"].add(fn)
                 topics[top]["chunk_count"] += 1
+                if user_id and p_user == user_id and user_id != "common":
+                    topics[top]["is_private"] = True
 
             return [
                 {
                     "topic": k,
                     "files": list(v["files"]),
-                    "chunk_count": v["chunk_count"]
+                    "chunk_count": v["chunk_count"],
+                    "is_private": v["is_private"]
                 }
                 for k, v in topics.items()
             ]
         except Exception as e:
             print(f"Error fetching topics: {e}")
             return []
+
+    def get_user_documents(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieves all documents accessible by user_id with privacy status (🔒 Private vs 🌐 Shared).
+        """
+        try:
+            scroll_result, _ = self.client.scroll(
+                collection_name=COLLECTION_NAME,
+                limit=500,
+                with_payload=True,
+                with_vectors=False
+            )
+            docs = {}
+            for point in scroll_result:
+                p_user = point.payload.get("user_id", "common")
+                # Privacy check: skip other users' private uploads
+                if user_id and p_user not in [user_id, "common"]:
+                    continue
+
+                fn = point.payload.get("filename", "Unknown")
+                top = point.payload.get("topic", "General")
+                if fn not in docs:
+                    is_priv = bool(user_id and p_user == user_id and user_id != "common")
+                    docs[fn] = {
+                        "filename": fn,
+                        "topics": set(),
+                        "chunk_count": 0,
+                        "owner": p_user,
+                        "is_private": is_priv
+                    }
+                docs[fn]["topics"].add(top)
+                docs[fn]["chunk_count"] += 1
+                if user_id and p_user == user_id and user_id != "common":
+                    docs[fn]["is_private"] = True
+
+            return [
+                {
+                    "filename": k,
+                    "topics": list(v["topics"]),
+                    "chunk_count": v["chunk_count"],
+                    "owner": v["owner"],
+                    "is_private": v["is_private"],
+                    "privacy_label": "🔒 Private to You" if v["is_private"] else "🌐 Shared Library"
+                }
+                for k, v in docs.items()
+            ]
+        except Exception as e:
+            print(f"Error fetching user documents: {e}")
+            return []
+

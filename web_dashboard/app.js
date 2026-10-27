@@ -1,14 +1,41 @@
 let currentQuiz = null;
 let currentFlashcards = [];
 let currentFlashcardIndex = 0;
-const currentUserId = "masai_student_1";
+let currentUserId = localStorage.getItem("study_user_id") || "alice";
 
 document.addEventListener("DOMContentLoaded", () => {
+    updateUserDisplay();
     loadHealthAndStats();
     loadTopics();
+    loadVaultDocuments();
     loadNewQuiz();
     initDropzone();
 });
+
+// Vault User Switching
+function updateUserDisplay() {
+    const displayEl = document.getElementById("display-user-id");
+    if (displayEl) displayEl.innerText = currentUserId;
+    const privacyBadge = document.getElementById("vault-privacy-badge");
+    if (privacyBadge) privacyBadge.innerText = `🔒 Private Vault: ${currentUserId}`;
+}
+
+function promptSwitchUser() {
+    const newId = prompt("Enter Student ID / Vault Username (e.g. alice, bob, masai_student):", currentUserId);
+    if (newId && newId.trim()) {
+        switchUser(newId.trim().toLowerCase());
+    }
+}
+
+function switchUser(newUserId) {
+    currentUserId = newUserId;
+    localStorage.setItem("study_user_id", currentUserId);
+    updateUserDisplay();
+    loadHealthAndStats();
+    loadTopics();
+    loadVaultDocuments();
+    loadNewQuiz();
+}
 
 // Tab Switcher
 function switchTab(tabId) {
@@ -20,6 +47,7 @@ function switchTab(tabId) {
     if (targetTab) targetTab.classList.add("active");
     if (targetBtn) targetBtn.classList.add("active");
 
+    if (tabId === "vault") loadVaultDocuments();
     if (tabId === "flashcards") loadFlashcards();
     if (tabId === "revise") loadRevisionData();
 }
@@ -41,10 +69,10 @@ async function loadHealthAndStats() {
     }
 }
 
-// Load Topics
+// Load Topics Scoped to Current User's Private Vault
 async function loadTopics() {
     try {
-        const res = await fetch("/api/topics");
+        const res = await fetch(`/api/topics?user_id=${currentUserId}`);
         const topics = await res.json();
         document.getElementById("stat-topics-count").innerText = topics.length;
 
@@ -55,6 +83,11 @@ async function loadTopics() {
         selectQuiz.innerHTML = '<option value="">🎯 Auto-Pick Topic</option>';
         selectFlashcard.innerHTML = '';
         topicList.innerHTML = '';
+
+        if (!topics || topics.length === 0) {
+            topicList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No topics indexed yet. Upload documents to index!</div>';
+            return;
+        }
 
         topics.forEach(t => {
             const shortTitle = t.topic.length > 25 ? t.topic.slice(0, 23) + '...' : t.topic;
@@ -71,21 +104,52 @@ async function loadTopics() {
             opt2.title = t.topic;
             selectFlashcard.appendChild(opt2);
 
-
-            // Vault list card
+            // Vault topic card
             const item = document.createElement("div");
             item.className = "topic-item";
+            const badgeClass = t.is_private ? "badge-private" : "badge-shared";
+            const badgeLabel = t.is_private ? "🔒 Private" : "🌐 Shared";
             item.innerHTML = `
                 <div>
                     <div class="topic-name">📌 ${t.topic}</div>
-                    <div class="topic-meta">Sources: ${t.files.join(", ")}</div>
+                    <div class="topic-meta">Sources: ${t.files.join(", ")} • ${t.chunk_count} chunks</div>
                 </div>
-                <span class="badge">${t.chunk_count} chunks indexed</span>
+                <span class="badge ${badgeClass}">${badgeLabel}</span>
             `;
             topicList.appendChild(item);
         });
     } catch (e) {
         console.error("Error loading topics:", e);
+    }
+}
+
+// Load Documents in User's Private Vault & Shared Library
+async function loadVaultDocuments() {
+    const docList = document.getElementById("doc-list");
+    if (!docList) return;
+    try {
+        const res = await fetch(`/api/vault/documents?user_id=${currentUserId}`);
+        const docs = await res.json();
+        docList.innerHTML = '';
+        if (!docs || docs.length === 0) {
+            docList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No documents in this vault yet. Upload files above!</div>';
+            return;
+        }
+        docs.forEach(d => {
+            const item = document.createElement("div");
+            item.className = "doc-item";
+            const badgeClass = d.is_private ? "badge-private" : "badge-shared";
+            item.innerHTML = `
+                <div>
+                    <div class="doc-name">📄 ${d.filename}</div>
+                    <div class="doc-meta">Topics: ${d.topics.slice(0, 3).join(", ")}${d.topics.length > 3 ? '...' : ''} • ${d.chunk_count} chunks</div>
+                </div>
+                <span class="badge ${badgeClass}">${d.privacy_label}</span>
+            `;
+            docList.appendChild(item);
+        });
+    } catch (e) {
+        console.error("Error loading vault documents:", e);
     }
 }
 
@@ -217,10 +281,11 @@ async function uploadFile(file) {
 
     progressContainer.classList.remove("hidden");
     progressFill.style.width = "40%";
-    statusText.innerText = `Ingesting ${file.name}... parsing chunks`;
+    statusText.innerText = `Ingesting ${file.name} into ${currentUserId}'s vault...`;
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("user_id", currentUserId);
 
     try {
         const res = await fetch("/api/ingest", {
@@ -229,13 +294,14 @@ async function uploadFile(file) {
         });
         const data = await res.json();
         progressFill.style.width = "100%";
-        statusText.innerText = `✅ Ingested ${data.chunks_indexed} chunks! Topics: ${data.detected_topics.join(", ")}`;
+        statusText.innerText = `✅ Ingested ${data.chunks_indexed} chunks into ${currentUserId}'s private vault!`;
         
         setTimeout(() => {
             loadTopics();
+            loadVaultDocuments();
             loadHealthAndStats();
             progressContainer.classList.add("hidden");
-        }, 2000);
+        }, 1500);
     } catch (e) {
         statusText.innerText = "❌ Ingestion error. Check format.";
     }
@@ -249,13 +315,14 @@ async function handleTextIngest() {
     const res = await fetch("/api/ingest/text", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, text })
+        body: JSON.stringify({ title, text, user_id: currentUserId })
     });
     const data = await res.json();
-    alert(`✅ Ingested note with ${data.chunks_indexed} chunks!`);
+    alert(`✅ Ingested note with ${data.chunks_indexed} chunks into ${currentUserId}'s vault!`);
     document.getElementById("paste-title").value = "";
     document.getElementById("paste-content").value = "";
     loadTopics();
+    loadVaultDocuments();
 }
 
 // EXPLAINER & SUMMARIZER
@@ -276,7 +343,7 @@ async function explainConcept() {
         const res = await fetch("/api/explain", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ concept })
+            body: JSON.stringify({ concept, user_id: currentUserId })
         });
         const data = await res.json();
         sources.innerText = `Sources Cited: ${data.sources.join(", ")}`;
@@ -301,7 +368,7 @@ async function summarizeChapter() {
         const res = await fetch("/api/summary", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ topic_or_chapter: topic })
+            body: JSON.stringify({ topic_or_chapter: topic, user_id: currentUserId })
         });
         const data = await res.json();
         sources.innerText = `Sources Cited: ${data.sources.join(", ")}`;
@@ -318,7 +385,7 @@ async function loadFlashcards() {
         const res = await fetch("/api/flashcards", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ topic, count: 5 })
+            body: JSON.stringify({ topic, count: 5, user_id: currentUserId })
         });
         const data = await res.json();
         currentFlashcards = data.flashcards || [];

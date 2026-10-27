@@ -142,6 +142,52 @@ body {
     box-shadow: 0 0 10px #10b981;
 }
 
+/* Vault Profile Badge */
+.vault-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.38rem 0.85rem;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    border-radius: var(--radius-full);
+    font-size: 0.82rem;
+    color: var(--text-primary);
+}
+.vault-icon {
+    font-size: 0.95rem;
+}
+.vault-label {
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+.vault-id {
+    font-weight: 700;
+    color: #c7d2fe;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-sm);
+}
+.btn-vault-switch {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(165, 180, 252, 0.35);
+    color: #c7d2fe;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.btn-vault-switch:hover {
+    background: rgba(99, 102, 241, 0.3);
+    color: #ffffff;
+    border-color: #818cf8;
+}
+
 /* Buttons */
 .btn {
     display: inline-flex;
@@ -583,6 +629,58 @@ body {
 .topic-meta {
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+/* Vault Document & Privacy Styles */
+.vault-subheading {
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 0.6rem;
+}
+.doc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+.doc-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: var(--transition);
+}
+.doc-item:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+}
+.doc-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.doc-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.badge-private {
+    background: rgba(168, 85, 247, 0.15) !important;
+    color: #c084fc !important;
+    border: 1px solid rgba(168, 85, 247, 0.35) !important;
+}
+.badge-shared {
+    background: rgba(6, 182, 212, 0.12) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(6, 182, 212, 0.3) !important;
 }
 
 /* 3D Flashcards */

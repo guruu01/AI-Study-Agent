@@ -182,7 +182,7 @@ def handle_revise(chat_id: int, user_id: str):
 def handle_explain(chat_id: int, concept: str):
     send_message(chat_id, f"💡 *Formulating ELI5 explanation for '{concept}'...*")
     try:
-        res = requests.post(f"{API_BASE_URL}/api/explain", json={"concept": concept}, timeout=20)
+        res = requests.post(f"{API_BASE_URL}/api/explain", json={"concept": concept, "user_id": str(chat_id)}, timeout=20)
         data = res.json()
         sources = ", ".join(data.get("sources", ["Notes"]))
         msg = (
@@ -197,7 +197,7 @@ def handle_explain(chat_id: int, concept: str):
 def handle_summary(chat_id: int, topic: str):
     send_message(chat_id, f"📖 *Synthesizing chapter summary for '{topic}'...*")
     try:
-        res = requests.post(f"{API_BASE_URL}/api/summary", json={"topic_or_chapter": topic}, timeout=20)
+        res = requests.post(f"{API_BASE_URL}/api/summary", json={"topic_or_chapter": topic, "user_id": str(chat_id)}, timeout=20)
         data = res.json()
         sources = ", ".join(data.get("sources", ["Notes"]))
         msg = (
@@ -210,7 +210,7 @@ def handle_summary(chat_id: int, topic: str):
         send_message(chat_id, f"Error generating summary: {e}")
 
 def handle_document_upload(chat_id: int, file_id: str, file_name: str):
-    send_message(chat_id, f"📥 *Downloading and parsing `{file_name}` into your vector vault...*")
+    send_message(chat_id, f"📥 *Downloading and parsing `{file_name}` into your private vector vault...*")
     try:
         # Get file path from Telegram
         f_info = requests.get(f"{TELEGRAM_API}/getFile?file_id={file_id}").json()
@@ -219,17 +219,19 @@ def handle_document_upload(chat_id: int, file_id: str, file_name: str):
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path_on_server}"
         file_bytes = requests.get(file_url).content
 
-        # Upload to FastAPI /api/ingest
+        # Upload to FastAPI /api/ingest with user_id for vault privacy
         files = {"file": (file_name, file_bytes)}
-        res = requests.post(f"{API_BASE_URL}/api/ingest", files=files, timeout=40)
-        data = res.json()
+        data = {"user_id": str(chat_id)}
+        res = requests.post(f"{API_BASE_URL}/api/ingest", files=files, data=data, timeout=40)
+        resp_data = res.json()
 
-        topics = ", ".join(data.get("detected_topics", []))
+        topics = ", ".join(resp_data.get("detected_topics", []))
         msg = (
-            f"✅ *Document Ingested & Grounded!*\n\n"
+            f"🔒 *Document Ingested into Your Private Vault!*\n\n"
             f"📄 *File:* `{file_name}`\n"
-            f"📦 *Chunks Indexed:* {data.get('chunks_indexed', 0)}\n"
-            f"You can now take a quiz with `/quiz` or get a summary with `/summary`! 🚀"
+            f"📦 *Chunks Indexed:* {resp_data.get('chunks_indexed', 0)}\n"
+            f"👤 *Privacy:* Scoped to your Telegram ID (`{chat_id}`). Other users will not see your documents.\n\n"
+            f"You can now take a quiz on your notes with `/quiz` or get a summary with `/summary`! 🚀"
         )
         send_message(chat_id, msg)
     except Exception as e:

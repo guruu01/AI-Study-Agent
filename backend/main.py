@@ -80,14 +80,21 @@ class ChapterSummaryRequest(BaseModel):
 
 class ExplainRequest(BaseModel):
     concept: str
+    user_id: str = "default_student"
 
 class FlashcardRequest(BaseModel):
     topic: str
     count: int = 5
+    user_id: str = "default_student"
+
+class ChapterSummaryRequest(BaseModel):
+    topic_or_chapter: str
+    user_id: str = "default_student"
 
 class TextIngestRequest(BaseModel):
     title: str
     text: str
+    user_id: str = "default_student"
 
 # API Endpoints
 @app.get("/api/health")
@@ -124,14 +131,23 @@ def set_gemini_key(req: Optional[GeminiKeyRequest] = None, api_key: Optional[str
     return {"status": "success", "message": "Gemini API key updated successfully and saved to .env"}
 
 @app.get("/api/topics")
-def list_topics():
-    return rag_engine.get_all_topics()
+def list_topics(user_id: Optional[str] = Query(None)):
+    """Returns topics visible to user_id (private uploads + shared common vault)."""
+    return rag_engine.get_all_topics(user_id=user_id)
+
+@app.get("/api/vault/documents")
+def list_vault_documents(user_id: Optional[str] = Query(None)):
+    """Returns all documents in the user's private vault and shared library."""
+    return rag_engine.get_user_documents(user_id=user_id)
 
 @app.post("/api/ingest")
-async def ingest_file(file: UploadFile = File(...)):
+async def ingest_file(
+    file: UploadFile = File(...),
+    user_id: str = Form("default_student")
+):
     """
     Accepts PDFs, .md, .docx, .pptx, Excel, images, audio/video notes.
-    Extracts text, creates chunks, and indexes into Qdrant for RAG.
+    Extracts text, creates chunks, and indexes into Qdrant for RAG scoped to user_id.
     """
     safe_filename = Path(file.filename).name
     file_path = os.path.join(UPLOAD_DIR, safe_filename)
@@ -145,17 +161,18 @@ async def ingest_file(file: UploadFile = File(...)):
         if not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract readable text from this file.")
 
-        # Chunk text
+        # Chunk text and index scoped to user_id
         chunks = chunk_text(text, filename=safe_filename)
-        indexed_count = rag_engine.index_chunks(chunks)
+        indexed_count = rag_engine.index_chunks(chunks, user_id=user_id)
 
         detected_topics = list(set(c["topic"] for c in chunks))
         return {
             "status": "success",
             "filename": safe_filename,
+            "user_id": user_id,
             "chunks_indexed": indexed_count,
             "detected_topics": detected_topics,
-            "message": f"Successfully ingested {safe_filename} into study vector store!"
+            "message": f"Successfully ingested {safe_filename} into private vault for {user_id}!"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -163,12 +180,14 @@ async def ingest_file(file: UploadFile = File(...)):
 @app.post("/api/ingest/text")
 def ingest_text(req: TextIngestRequest):
     chunks = chunk_text(req.text, filename=f"{req.title}.md")
-    indexed_count = rag_engine.index_chunks(chunks)
+    indexed_count = rag_engine.index_chunks(chunks, user_id=req.user_id)
     return {
         "status": "success",
         "title": req.title,
+        "user_id": req.user_id,
         "chunks_indexed": indexed_count,
-        "topics": list(set(c["topic"] for c in chunks))
+        "topics": list(set(c["topic"] for c in chunks)),
+        "message": f"Successfully stored notes in private vault for {req.user_id}!"
     }
 
 @app.post("/api/quiz")
@@ -198,17 +217,17 @@ def get_revision_plan(user_id: str = Query("default_student")):
 @app.post("/api/summary")
 def summarize_chapter(req: ChapterSummaryRequest):
     """Summarizes a chapter or topic using grounded study notes."""
-    return agent.summarize_chapter(req.topic_or_chapter)
+    return agent.summarize_chapter(req.topic_or_chapter, user_id=req.user_id)
 
 @app.post("/api/explain")
 def explain_concept(req: ExplainRequest):
     """Explains a concept simply (ELI5 + Analogy + Study Note Reference)."""
-    return agent.explain_concept(req.concept)
+    return agent.explain_concept(req.concept, user_id=req.user_id)
 
 @app.post("/api/flashcards")
 def get_flashcards(req: FlashcardRequest):
     """Generates active-recall flashcard deck."""
-    return agent.generate_flashcards(topic=req.topic, count=req.count)
+    return agent.generate_flashcards(topic=req.topic, count=req.count, user_id=req.user_id)
 
 # Static Dashboard Assets
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "web_dashboard")
