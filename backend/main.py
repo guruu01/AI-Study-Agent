@@ -96,6 +96,24 @@ class TextIngestRequest(BaseModel):
     text: str
     user_id: str = "default_student"
 
+class ProfileUpdateRequest(BaseModel):
+    user_id: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    education_level: Optional[str] = None
+    field_of_study: Optional[str] = None
+    learning_goals: Optional[str] = None
+    preferred_theme: Optional[str] = None
+    preferred_language: Optional[str] = None
+
+class SessionLogRequest(BaseModel):
+    user_id: str
+    session_type: str
+    topic: str
+    duration_seconds: int = 60
+    details: Optional[str] = None
+
 # API Endpoints
 @app.get("/api/health")
 def health():
@@ -195,14 +213,66 @@ def generate_quiz(req: QuizRequest):
     """Generates an MCQ quiz question grounded in user's materials."""
     return agent.generate_quiz(user_id=req.user_id, topic=req.topic)
 
+@app.get("/api/auth/config")
+def get_auth_config():
+    """Returns Supabase public configuration for client authentication."""
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = os.getenv("SUPABASE_ANON_KEY", "").strip()
+    return {
+        "supabase_url": url,
+        "supabase_anon_key": key,
+        "auth_enabled": bool(url and key)
+    }
+
+@app.get("/api/profile")
+def get_profile(user_id: str = Query("default_student")):
+    """Retrieves profile for authenticated user."""
+    return tracker.get_or_create_profile(user_id=user_id)
+
+@app.put("/api/profile")
+def update_profile(req: ProfileUpdateRequest):
+    """Updates user profile attributes."""
+    data = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    return tracker.update_profile(user_id=req.user_id, data=data)
+
+@app.get("/api/dashboard/overview")
+def get_dashboard_overview(user_id: str = Query("default_student")):
+    """Returns real personalized study statistics and activity history for user."""
+    return tracker.get_dashboard_overview(user_id=user_id)
+
+@app.post("/api/sessions")
+def log_study_session(req: SessionLogRequest):
+    """Logs a completed study session (quiz, flashcard review, ELI5 explanation)."""
+    return tracker.log_study_session(
+        user_id=req.user_id,
+        session_type=req.session_type,
+        topic=req.topic,
+        duration_seconds=req.duration_seconds,
+        details=req.details
+    )
+
 @app.post("/api/answer")
 def evaluate_answer(req: AnswerRequest):
     """Evaluates selected answer, records score in SQLite, returns explanation + citations."""
-    return agent.evaluate_answer(
+    result = agent.evaluate_answer(
         quiz_id=req.quiz_id,
         user_id=req.user_id,
         selected_option=req.selected_option
     )
+    # Log study session automatically
+    try:
+        topic_name = result.get("topic") or "General"
+        is_corr = result.get("is_correct", False)
+        tracker.log_study_session(
+            user_id=req.user_id,
+            session_type="quiz",
+            topic=topic_name,
+            duration_seconds=45,
+            details=f"{'Correct' if is_corr else 'Needs Review'}: {req.selected_option}"
+        )
+    except Exception as e:
+        print(f"Note logging quiz study session: {e}")
+    return result
 
 @app.get("/api/progress")
 def get_user_progress(user_id: str = Query("default_student")):
@@ -217,17 +287,50 @@ def get_revision_plan(user_id: str = Query("default_student")):
 @app.post("/api/summary")
 def summarize_chapter(req: ChapterSummaryRequest):
     """Summarizes a chapter or topic using grounded study notes."""
-    return agent.summarize_chapter(req.topic_or_chapter, user_id=req.user_id)
+    res = agent.summarize_chapter(req.topic_or_chapter, user_id=req.user_id)
+    try:
+        tracker.log_study_session(
+            user_id=req.user_id,
+            session_type="summary",
+            topic=req.topic_or_chapter,
+            duration_seconds=120,
+            details=f"Read summary of {req.topic_or_chapter}"
+        )
+    except Exception:
+        pass
+    return res
 
 @app.post("/api/explain")
 def explain_concept(req: ExplainRequest):
     """Explains a concept simply (ELI5 + Analogy + Study Note Reference)."""
-    return agent.explain_concept(req.concept, user_id=req.user_id)
+    res = agent.explain_concept(req.concept, user_id=req.user_id)
+    try:
+        tracker.log_study_session(
+            user_id=req.user_id,
+            session_type="eli5",
+            topic=req.concept,
+            duration_seconds=90,
+            details=f"Explored concept: {req.concept}"
+        )
+    except Exception:
+        pass
+    return res
 
 @app.post("/api/flashcards")
 def get_flashcards(req: FlashcardRequest):
     """Generates active-recall flashcard deck."""
-    return agent.generate_flashcards(topic=req.topic, count=req.count, user_id=req.user_id)
+    res = agent.generate_flashcards(topic=req.topic, count=req.count, user_id=req.user_id)
+    try:
+        tracker.log_study_session(
+            user_id=req.user_id,
+            session_type="flashcards",
+            topic=req.topic,
+            duration_seconds=180,
+            details=f"Generated deck of {req.count} cards for {req.topic}"
+        )
+    except Exception:
+        pass
+    return res
 
 # Static Dashboard Assets
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "web_dashboard")

@@ -1,13 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Study Agent — RAG Knowledge & Quiz Engine</title>
+    <title>AI Study Agent — Your Personal AI-Powered Learning Companion</title>
+    <meta name="description" content="Learn smarter, organize your studies, and track your progress in one place with AI-driven active recall quizzes, multi-format RAG document vaults, and personalized learning roadmaps.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+    
+    <!-- Supabase Official JS SDK CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Instant Theme Loader (Prevents theme flash) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem("study_theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+            document.documentElement.setAttribute("data-theme", savedTheme);
+        })();
+    </script>
 </head>
 <body>
     <!-- Background glowing ambient spheres -->
@@ -15,292 +27,665 @@
     <div class="ambient-glow glow-2"></div>
     <div class="ambient-glow glow-3"></div>
 
-    <header class="app-header">
-        <div class="brand">
-            <div class="logo-icon">🧠</div>
-            <div class="brand-text">
-                <h1>StudyAgent<span class="gradient-text">.AI</span></h1>
-                <p class="subtitle">Multi-Format RAG & Telegram Active Recall Engine</p>
-            </div>
-        </div>
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
 
-        <div class="header-actions">
-            <div class="vault-badge" id="vault-user-badge">
-                <span class="vault-icon">👤</span>
-                <span class="vault-label">Vault:</span>
-                <span class="vault-id" id="display-user-id">alice</span>
-                <button class="btn-vault-switch" onclick="promptSwitchUser()" title="Switch user vault (e.g. alice, bob)">⇄ Switch</button>
+    <!-- ========================================== -->
+    <!-- VIEW 1: AUTHENTICATION LANDING PAGE        -->
+    <!-- ========================================== -->
+    <div id="view-landing" class="view-section active">
+        <!-- Landing Navbar -->
+        <header class="landing-header">
+            <div class="brand">
+                <div class="logo-icon">🧠</div>
+                <div class="brand-text">
+                    <h1>StudyAgent<span class="gradient-text">.AI</span></h1>
+                    <p class="subtitle">AI-Powered Active Recall & Learning Companion</p>
+                </div>
             </div>
-            <div class="status-badge" id="system-status-badge">
-                <span class="status-dot"></span>
-                <span id="status-text">Qdrant Vector DB Active</span>
+            <div class="landing-nav-actions">
+                <button class="theme-toggle-btn" id="landing-theme-toggle" onclick="toggleTheme()" title="Toggle Theme" aria-label="Toggle Theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+                <button class="btn btn-secondary" onclick="scrollToAuth('login')">Log In</button>
+                <button class="btn btn-primary" onclick="scrollToAuth('signup')">Get Started</button>
             </div>
-            <div class="status-badge" id="model-status-badge" style="background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.35); color: #a5b4fc;">
-                <span class="status-dot" style="background: #818cf8; box-shadow: 0 0 10px #818cf8;"></span>
-                <span>🦙 Llama 3.1 & Gemini RAG</span>
-            </div>
-            <a href="http://localhost:5678" target="_blank" class="btn btn-primary" id="btn-open-n8n">
-                ⚡ Open n8n Workflows
-            </a>
-        </div>
-    </header>
+        </header>
 
-    <main class="app-layout">
-        <!-- Top Stats Ribbon -->
-        <section class="stats-ribbon" id="stats-ribbon">
-            <div class="stat-card">
-                <div class="stat-icon">🎯</div>
-                <div class="stat-info">
-                    <span class="stat-label">Total Questions</span>
-                    <h3 class="stat-value" id="stat-total-quizzes">0</h3>
+        <!-- Hero Section -->
+        <section class="landing-hero">
+            <div class="hero-badge">
+                <span class="badge-sparkle">✨</span> Your Personal AI-Powered Learning Companion
+            </div>
+            <h1 class="hero-title">
+                Learn smarter, organize your studies,<br>
+                and <span class="gradient-text">track your progress</span> in one place.
+            </h1>
+            <p class="hero-description">
+                Upload your lecture notes, textbooks, and recordings. StudyAgent converts them into grounded active recall quizzes, interactive 3D flashcards, and personalized revision roadmaps tailored specifically to you.
+            </p>
+
+            <!-- Authentication Card -->
+            <div class="auth-card" id="auth-card">
+                <h3 class="auth-card-title" id="auth-card-title">Join StudyAgent Today</h3>
+                <p class="auth-card-subtitle">Choose your preferred sign-in method to access your personalized vault.</p>
+
+                <!-- Official Google OAuth Button -->
+                <button class="btn-google-oauth" id="btn-google-login" onclick="loginWithGoogle()">
+                    <svg class="google-svg" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                    <span>Continue with Google</span>
+                </button>
+
+                <div class="auth-separator">
+                    <span>or sign in with email OTP</span>
+                </div>
+
+                <!-- Passwordless Email OTP Form -->
+                <form class="auth-email-form" onsubmit="handleSendOtp(event)">
+                    <div class="input-field-group">
+                        <label for="landing-email-input" class="input-label">Student Email Address</label>
+                        <input type="email" id="landing-email-input" class="input-text" placeholder="name@university.edu" required autocomplete="email">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="btn-send-otp">
+                        <span id="btn-otp-text">Send Verification Code ✉️</span>
+                        <span class="btn-spinner hidden" id="spinner-send-otp"></span>
+                    </button>
+                </form>
+
+                <div class="auth-guest-bypass">
+                    <button class="btn-link" onclick="loginAsDemoUser()">⚡ Continue as Guest (Explore Sandbox)</button>
+                </div>
+
+                <div class="auth-disclaimer">
+                    By signing in, you agree to our <a href="#" onclick="openModal('modal-terms'); return false;">Terms of Service</a> and <a href="#" onclick="openModal('modal-privacy'); return false;">Privacy Policy</a>.
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">📊</div>
-                <div class="stat-info">
-                    <span class="stat-label">Accuracy Rate</span>
-                    <h3 class="stat-value" id="stat-accuracy">0%</h3>
+
+            <!-- Features Highlights Grid -->
+            <div class="landing-features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Grounded Active Recall</h3>
+                    <p>AI generates challenging MCQ assessments strictly sourced from your own uploaded documents.</p>
                 </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">📚</div>
-                <div class="stat-info">
-                    <span class="stat-label">Indexed Topics</span>
-                    <h3 class="stat-value" id="stat-topics-count">...</h3>
+                <div class="feature-card">
+                    <div class="feature-icon">📁</div>
+                    <h3>Multi-Format Vault</h3>
+                    <p>Upload PDFs, Word docs, PowerPoints, audio notes, and code with isolated privacy per student.</p>
                 </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">⚠️</div>
-                <div class="stat-info">
-                    <span class="stat-label">Topics To Revise</span>
-                    <h3 class="stat-value warning-text" id="stat-weak-count">0</h3>
+                <div class="feature-card">
+                    <div class="feature-icon">💡</div>
+                    <h3>ELI5 Concept Explainer</h3>
+                    <p>Simplify complex technical concepts with everyday analogies, practical examples, and memory hooks.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📇</div>
+                    <h3>3D Active Recall Cards</h3>
+                    <p>Spaced repetition flashcards designed to lock facts into your long-term memory effortlessly.</p>
                 </div>
             </div>
         </section>
 
-        <!-- Navigation Tabs -->
-        <nav class="study-tabs" id="study-tabs">
-            <button class="tab-btn active" id="tab-btn-quiz" onclick="switchTab('quiz')">
-                <span class="tab-icon">⚡</span> Interactive Quiz
-            </button>
-            <button class="tab-btn" id="tab-btn-vault" onclick="switchTab('vault')">
-                <span class="tab-icon">📁</span> Document Vault (RAG)
-            </button>
-            <button class="tab-btn" id="tab-btn-explain" onclick="switchTab('explain')">
-                <span class="tab-icon">💡</span> Concept Explainer (ELI5)
-            </button>
-            <button class="tab-btn" id="tab-btn-flashcards" onclick="switchTab('flashcards')">
-                <span class="tab-icon">📇</span> 3D Flashcards
-            </button>
-            <button class="tab-btn" id="tab-btn-revise" onclick="switchTab('revise')">
-                <span class="tab-icon">🔍</span> Revision Roadmap
-            </button>
-        </nav>
+        <!-- Landing Footer -->
+        <footer class="landing-footer">
+            <p>© 2026 AI Study Agent. Built for curious learners and high-achieving students.</p>
+            <div class="footer-links">
+                <a href="#" onclick="openModal('modal-privacy'); return false;">Privacy Policy</a>
+                <span>•</span>
+                <a href="#" onclick="openModal('modal-terms'); return false;">Terms of Service</a>
+                <span>•</span>
+                <a href="https://github.com/guruu01/AI-Study-Agent" target="_blank" rel="noopener">GitHub</a>
+            </div>
+        </footer>
+    </div>
 
-        <!-- TAB 1: INTERACTIVE QUIZ & TELEGRAM SIMULATOR -->
-        <section class="tab-content active" id="tab-quiz">
-            <div class="card quiz-card">
+
+    <!-- ========================================== -->
+    <!-- VIEW 2: PERSONALIZED DASHBOARD             -->
+    <!-- ========================================== -->
+    <div id="view-dashboard" class="view-section">
+        <!-- App Header -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="logo-icon">🧠</div>
+                <div class="brand-text">
+                    <h1>StudyAgent<span class="gradient-text">.AI</span></h1>
+                    <p class="subtitle" id="header-user-tagline">Personalized AI Study Engine</p>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <!-- Theme Toggle Button -->
+                <button class="theme-toggle-btn" id="dash-theme-toggle" onclick="toggleTheme()" title="Toggle Light/Dark Theme" aria-label="Toggle Theme">
+                    <span class="theme-icon" id="theme-icon-indicator">🌙</span>
+                </button>
+
+                <!-- System Badges -->
+                <div class="status-badge" id="system-status-badge">
+                    <span class="status-dot"></span>
+                    <span id="status-text">Qdrant Vector DB Active</span>
+                </div>
+                <div class="status-badge model-badge">
+                    <span class="status-dot model-dot"></span>
+                    <span>🦙 Llama 3.3 & Gemini</span>
+                </div>
+
+                <!-- User Profile Menu -->
+                <div class="profile-dropdown-container">
+                    <button class="profile-trigger-btn" id="profile-dropdown-btn" onclick="toggleProfileDropdown()">
+                        <div class="avatar-circle" id="header-avatar-circle">
+                            <img id="header-avatar-img" class="avatar-img hidden" src="" alt="Avatar">
+                            <span id="header-avatar-initials">S</span>
+                        </div>
+                        <span class="profile-greeting" id="header-greeting-name">Student</span>
+                        <span class="dropdown-chevron">▼</span>
+                    </button>
+
+                    <!-- Dropdown Menu -->
+                    <div class="profile-dropdown-menu hidden" id="profile-dropdown-menu">
+                        <div class="profile-dropdown-header">
+                            <p class="dropdown-user-name" id="dropdown-full-name">Student</p>
+                            <p class="dropdown-user-email" id="dropdown-email">user@studyagent.ai</p>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item" onclick="openProfileModal()">
+                            <span class="item-icon">👤</span> Edit Profile & Goals
+                        </button>
+                        <button class="dropdown-item" onclick="toggleTheme()">
+                            <span class="item-icon">🌓</span> Switch Theme
+                        </button>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item text-danger" onclick="handleLogout()">
+                            <span class="item-icon">🚪</span> Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-layout">
+            <!-- Welcome Ribbon & Personalized Overview -->
+            <section class="dashboard-welcome-banner">
+                <div class="welcome-text-container">
+                    <span class="welcome-date" id="welcome-date-string">Tuesday, October 27</span>
+                    <h2 class="welcome-title" id="dash-welcome-heading">Welcome back, <span class="gradient-text" id="welcome-first-name">Student</span>!</h2>
+                    <p class="welcome-motto" id="welcome-motto-text">Ready to master new concepts? Let's turn your study materials into permanent memory.</p>
+                </div>
+                <div class="welcome-quick-actions">
+                    <button class="btn btn-primary" onclick="switchTab('quiz')">⚡ Start Quiz</button>
+                    <button class="btn btn-secondary" onclick="switchTab('vault')">📤 Upload Notes</button>
+                    <button class="btn btn-secondary" onclick="switchTab('explain')">💡 Explain Concept</button>
+                    <button class="btn btn-secondary" onclick="switchTab('flashcards')">📇 Flashcards</button>
+                </div>
+            </section>
+
+            <!-- Top Stats Ribbon -->
+            <section class="stats-ribbon" id="stats-ribbon">
+                <div class="stat-card">
+                    <div class="stat-icon">🎯</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Total Study Sessions</span>
+                        <h3 class="stat-value" id="stat-total-sessions">0</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Total Study Time</span>
+                        <h3 class="stat-value" id="stat-study-time">0 min</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Accuracy Rate</span>
+                        <h3 class="stat-value" id="stat-accuracy">0%</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🏆</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Mastered Topics</span>
+                        <h3 class="stat-value" id="stat-mastered-count">0</h3>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recent Study Activity Stream -->
+            <section class="activity-section card" style="margin-bottom: 1.8rem;">
                 <div class="card-header">
                     <div>
-                        <span class="badge" id="quiz-topic-badge">Topic: Agile Methodology</span>
-                        <h2 class="card-title" id="quiz-question-title">Active Recall Challenge</h2>
+                        <h3 class="card-title" style="font-size: 1.15rem;">Recent Study Activity</h3>
+                        <p class="card-subtitle">Your real learning session timeline.</p>
                     </div>
-                    <div class="quiz-controls">
-                        <select id="select-quiz-topic" class="select-dropdown">
-                            <option value="">🎯 Auto-Pick Topic</option>
-                        </select>
-                        <button class="btn btn-primary" id="btn-generate-quiz" onclick="loadNewQuiz()">
-                            🔄 New Question
-                        </button>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshDashboardOverview()">🔄 Refresh</button>
+                </div>
+                <div class="activity-timeline" id="activity-timeline">
+                    <!-- Populated dynamically or empty state -->
+                    <div class="empty-state-container">
+                        <div class="empty-icon">🌱</div>
+                        <h4>No study activity recorded yet</h4>
+                        <p>Complete a quiz challenge, review flashcards, or upload your lecture notes to begin building your streak!</p>
                     </div>
                 </div>
+            </section>
 
-                <div class="quiz-body" id="quiz-body">
-                    <div class="question-stem" id="question-stem">
-                        Loading your grounded question...
-                    </div>
+            <!-- Navigation Tabs -->
+            <nav class="study-tabs" id="study-tabs">
+                <button class="tab-btn active" id="tab-btn-quiz" onclick="switchTab('quiz')">
+                    <span class="tab-icon">⚡</span> Interactive Quiz
+                </button>
+                <button class="tab-btn" id="tab-btn-vault" onclick="switchTab('vault')">
+                    <span class="tab-icon">📁</span> Document Vault (RAG)
+                </button>
+                <button class="tab-btn" id="tab-btn-explain" onclick="switchTab('explain')">
+                    <span class="tab-icon">💡</span> Concept Explainer (ELI5)
+                </button>
+                <button class="tab-btn" id="tab-btn-flashcards" onclick="switchTab('flashcards')">
+                    <span class="tab-icon">📇</span> 3D Flashcards
+                </button>
+                <button class="tab-btn" id="tab-btn-revise" onclick="switchTab('revise')">
+                    <span class="tab-icon">🔍</span> Revision Roadmap
+                </button>
+            </nav>
 
-                    <div class="options-grid" id="options-grid">
-                        <!-- Options injected dynamically -->
-                    </div>
-
-                    <!-- Evaluation & Feedback Box -->
-                    <div class="feedback-box hidden" id="feedback-box">
-                        <div class="feedback-header">
-                            <span class="feedback-badge" id="feedback-badge">✅ Correct Answer</span>
-                            <span class="citation-badge" id="citation-badge">📖 Grounding: Agile_Product_Management.md</span>
-                        </div>
-                        <p class="feedback-explanation" id="feedback-explanation"></p>
-                        <div class="feedback-actions">
-                            <button class="btn btn-primary" id="btn-next-question" onclick="loadNewQuiz()">
-                                Next Question ➡️
-                            </button>
-                            <button class="btn btn-secondary" onclick="switchTab('revise')">
-                                View Revision Plan 🔍
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- TAB 2: DOCUMENT VAULT & UPLOADS -->
-        <section class="tab-content" id="tab-vault">
-            <div class="grid-2-col">
-                <div class="card upload-card">
-                    <h2 class="card-title">Upload Study Materials</h2>
-                    <p class="card-subtitle">
-                        Accepts PDF, Word (.docx), PPT (.pptx), Excel (.xlsx), Markdown (.md), Images & Audio Notes.
-                    </p>
-
-                    <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
-                        <div class="drop-icon">📤</div>
-                        <h4>Drop files here or click to browse</h4>
-                        <p class="drop-hint">Documents are parsed, chunked, and embedded into Qdrant for strict RAG grounding.</p>
-                        <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)" accept=".pdf,.md,.docx,.pptx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a">
-                    </div>
-
-                    <div class="upload-progress-container hidden" id="upload-progress-container">
-                        <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" id="upload-progress-fill"></div>
-                        </div>
-                        <span class="progress-status" id="upload-status-text">Parsing and indexing chunks...</span>
-                    </div>
-
-                    <div class="text-paste-section">
-                        <h4>Or Paste Raw Study Notes</h4>
-                        <input type="text" id="paste-title" class="input-text" placeholder="Note Title (e.g., Sprint Planning Notes)">
-                        <textarea id="paste-content" class="textarea-input" rows="4" placeholder="Paste chapter notes, lecture takeaways, or markdown here..."></textarea>
-                        <button class="btn btn-secondary" id="btn-paste-ingest" onclick="handleTextIngest()">
-                            📥 Ingest Raw Notes
-                        </button>
-                    </div>
-                </div>
-
-                <div class="card vault-list-card">
-                    <div class="card-header" style="margin-bottom: 0.8rem;">
+            <!-- TAB 1: INTERACTIVE QUIZ & TELEGRAM SIMULATOR -->
+            <section class="tab-content active" id="tab-quiz">
+                <div class="card quiz-card">
+                    <div class="card-header">
                         <div>
-                            <h2 class="card-title">Knowledge Vault</h2>
-                            <p class="card-subtitle">Your private documents & shared foundational library.</p>
+                            <span class="badge" id="quiz-topic-badge">Topic: Agile Methodology</span>
+                            <h2 class="card-title" id="quiz-question-title">Active Recall Challenge</h2>
                         </div>
-                        <span class="badge" id="vault-privacy-badge">🔒 Private Vault: alice</span>
-                    </div>
-
-                    <div class="vault-sections-container">
-                        <h4 class="vault-subheading">📄 Indexed Documents</h4>
-                        <div class="doc-list" id="doc-list" style="margin-bottom: 1.2rem;">
-                            <!-- Populated dynamically -->
-                        </div>
-
-                        <h4 class="vault-subheading">📌 Available Topics</h4>
-                        <div class="topic-list" id="topic-list">
-                            <!-- Loaded dynamically -->
+                        <div class="quiz-controls">
+                            <select id="select-quiz-topic" class="select-dropdown">
+                                <option value="">🎯 Auto-Pick Topic</option>
+                            </select>
+                            <button class="btn btn-primary" id="btn-generate-quiz" onclick="loadNewQuiz()">
+                                🔄 New Question
+                            </button>
                         </div>
                     </div>
-                </div>
-            </div>
-        </section>
 
-        <!-- TAB 3: CONCEPT EXPLAINER (ELI5) & SUMMARY -->
-        <section class="tab-content" id="tab-explain">
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h2 class="card-title">Explain Difficult Concepts Simply</h2>
-                        <p class="card-subtitle">Get everyday analogies (ELI5), real-world practical applications, and citations from your notes.</p>
-                    </div>
-                </div>
-
-                <div class="explain-input-group">
-                    <input type="text" id="input-concept" class="input-text" placeholder="e.g. Velocity, Sprint Retrospective, INVEST Criteria, Burndown Chart...">
-                    <button class="btn btn-primary" id="btn-explain-concept" onclick="explainConcept()">
-                        💡 Explain Concept (ELI5)
-                    </button>
-                    <button class="btn btn-secondary" id="btn-summarize-chapter" onclick="summarizeChapter()">
-                        📖 Summarize Chapter
-                    </button>
-                </div>
-
-                <div class="explain-result hidden" id="explain-result">
-                    <div class="result-header">
-                        <span class="badge" id="explain-badge">Concept: Velocity</span>
-                        <span class="sources-tag" id="explain-sources">Sources: Agile_Product_Management.md</span>
-                    </div>
-                    <div class="markdown-output" id="explain-output"></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- TAB 4: 3D FLASHCARDS -->
-        <section class="tab-content" id="tab-flashcards">
-            <div class="card flashcards-container">
-                <div class="card-header">
-                    <div>
-                        <h2 class="card-title">Active Recall 3D Flashcards</h2>
-                        <p class="card-subtitle">Click the card to flip between Question and Answer.</p>
-                    </div>
-                    <div class="quiz-controls">
-                        <select id="select-flashcard-topic" class="select-dropdown">
-                            <option value="Agile Methodology">Agile Methodology</option>
-                        </select>
-                        <button class="btn btn-primary" onclick="loadFlashcards()">Generate Decks 📇</button>
-                    </div>
-                </div>
-
-                <div class="flashcard-scene" onclick="flipCard()">
-                    <div class="flashcard-card" id="flashcard-card">
-                        <div class="flashcard-face flashcard-front">
-                            <span class="card-side-label">PROMPT (CLICK TO FLIP)</span>
-                            <h3 id="card-front-text">What is a Sprint in Scrum?</h3>
-                            <span class="card-hint">💡 Tap to reveal answer</span>
+                    <div class="quiz-body" id="quiz-body">
+                        <div class="question-stem" id="question-stem">
+                            Loading your grounded question...
                         </div>
-                        <div class="flashcard-face flashcard-back">
-                            <span class="card-side-label">ANSWER & EXPLANATION</span>
-                            <p id="card-back-text">A fixed timebox of 1 to 4 weeks during which the team builds a usable product increment.</p>
-                            <div class="card-meta">
-                                <span class="card-takeaway" id="card-takeaway-text">Memory Hook: Consistent duration, no scope creep.</span>
+
+                        <div class="options-grid" id="options-grid">
+                            <!-- Options injected dynamically -->
+                        </div>
+
+                        <!-- Evaluation & Feedback Box -->
+                        <div class="feedback-box hidden" id="feedback-box">
+                            <div class="feedback-header">
+                                <span class="feedback-badge" id="feedback-badge">✅ Correct Answer</span>
+                                <span class="citation-badge" id="citation-badge">📖 Grounding: Agile_Product_Management.md</span>
+                            </div>
+                            <p class="feedback-explanation" id="feedback-explanation"></p>
+                            <div class="feedback-actions">
+                                <button class="btn btn-primary" id="btn-next-question" onclick="loadNewQuiz()">
+                                    Next Question ➡️
+                                </button>
+                                <button class="btn btn-secondary" onclick="switchTab('revise')">
+                                    View Revision Plan 🔍
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
+            </section>
 
-                <div class="flashcard-nav">
-                    <button class="btn btn-secondary" onclick="prevFlashcard()">⬅️ Previous</button>
-                    <span id="flashcard-index">Card 1 of 5</span>
-                    <button class="btn btn-primary" onclick="nextFlashcard()">Next ➡️</button>
-                </div>
-            </div>
-        </section>
+            <!-- TAB 2: DOCUMENT VAULT & UPLOADS -->
+            <section class="tab-content" id="tab-vault">
+                <div class="grid-2-col">
+                    <div class="card upload-card">
+                        <h2 class="card-title">Upload Study Materials</h2>
+                        <p class="card-subtitle">
+                            Accepts PDF, Word (.docx), PPT (.pptx), Excel (.xlsx), Markdown (.md), Images & Audio Notes.
+                        </p>
 
-        <!-- TAB 5: WEAK TOPIC REVISION ROADMAP -->
-        <section class="tab-content" id="tab-revise">
-            <div class="grid-2-col">
-                <div class="card">
-                    <h2 class="card-title">Topic Mastery & Weak Area Diagnostics</h2>
-                    <p class="card-subtitle">Topics with under 70% accuracy are automatically flagged for revision.</p>
-                    
-                    <div class="mastery-bars-list" id="mastery-bars-list">
-                        <!-- Loaded dynamically -->
+                        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+                            <div class="drop-icon">📤</div>
+                            <h4>Drop files here or click to browse</h4>
+                            <p class="drop-hint">Documents are parsed, chunked, and embedded into Qdrant for strict RAG grounding.</p>
+                            <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)" accept=".pdf,.md,.docx,.pptx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a">
+                        </div>
+
+                        <div class="upload-progress-container hidden" id="upload-progress-container">
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" id="upload-progress-fill"></div>
+                            </div>
+                            <span class="progress-status" id="upload-status-text">Parsing and indexing chunks...</span>
+                        </div>
+
+                        <div class="text-paste-section">
+                            <h4>Or Paste Raw Study Notes</h4>
+                            <input type="text" id="paste-title" class="input-text" placeholder="Note Title (e.g., Sprint Planning Notes)">
+                            <textarea id="paste-content" class="textarea-input" rows="4" placeholder="Paste chapter notes, lecture takeaways, or markdown here..."></textarea>
+                            <button class="btn btn-secondary" id="btn-paste-ingest" onclick="handleTextIngest()">
+                                📥 Ingest Raw Notes
+                            </button>
+                        </div>
                     </div>
 
-                    <div style="margin-top: 1.5rem;">
-                        <button class="btn btn-primary" id="btn-generate-revision" onclick="generateRevisionRoadmap()">
-                            🎯 Generate Targeted Revision Roadmap
+                    <div class="card vault-list-card">
+                        <div class="card-header" style="margin-bottom: 0.8rem;">
+                            <div>
+                                <h2 class="card-title">Knowledge Vault</h2>
+                                <p class="card-subtitle">Your private documents & shared foundational library.</p>
+                            </div>
+                            <span class="badge" id="vault-privacy-badge">🔒 Private Vault</span>
+                        </div>
+
+                        <div class="vault-sections-container">
+                            <h4 class="vault-subheading">📄 Indexed Documents</h4>
+                            <div class="doc-list" id="doc-list" style="margin-bottom: 1.2rem;">
+                                <!-- Populated dynamically -->
+                            </div>
+
+                            <h4 class="vault-subheading">📌 Available Topics</h4>
+                            <div class="topic-list" id="topic-list">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: CONCEPT EXPLAINER (ELI5) & SUMMARY -->
+            <section class="tab-content" id="tab-explain">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Explain Difficult Concepts Simply</h2>
+                            <p class="card-subtitle">Get everyday analogies (ELI5), real-world practical applications, and citations from your notes.</p>
+                        </div>
+                    </div>
+
+                    <div class="explain-input-group">
+                        <input type="text" id="input-concept" class="input-text" placeholder="e.g. Velocity, Sprint Retrospective, INVEST Criteria, Burndown Chart...">
+                        <button class="btn btn-primary" id="btn-explain-concept" onclick="explainConcept()">
+                            💡 Explain Concept (ELI5)
+                        </button>
+                        <button class="btn btn-secondary" id="btn-summarize-chapter" onclick="summarizeChapter()">
+                            📖 Summarize Chapter
                         </button>
                     </div>
-                </div>
 
-                <div class="card">
-                    <h2 class="card-title">Your 15-Minute Revision Plan</h2>
-                    <p class="card-subtitle">AI Study Coach guidance based on your missed questions.</p>
-                    <div class="revision-plan-output" id="revision-plan-output">
-                        <p class="placeholder-text">Take quizzes or click "Generate Targeted Revision Roadmap" to synthesize your study guide!</p>
+                    <div class="explain-result hidden" id="explain-result">
+                        <div class="result-header">
+                            <span class="badge" id="explain-badge">Concept: Velocity</span>
+                            <span class="sources-tag" id="explain-sources">Sources: Agile_Product_Management.md</span>
+                        </div>
+                        <div class="markdown-output" id="explain-output"></div>
                     </div>
                 </div>
-            </div>
-        </section>
-    </main>
+            </section>
 
+            <!-- TAB 4: 3D FLASHCARDS -->
+            <section class="tab-content" id="tab-flashcards">
+                <div class="card flashcards-container">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Active Recall 3D Flashcards</h2>
+                            <p class="card-subtitle">Click the card to flip between Question and Answer.</p>
+                        </div>
+                        <div class="quiz-controls">
+                            <select id="select-flashcard-topic" class="select-dropdown">
+                                <option value="Agile Methodology">Agile Methodology</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="loadFlashcards()">Generate Decks 📇</button>
+                        </div>
+                    </div>
+
+                    <div class="flashcard-scene" onclick="flipCard()">
+                        <div class="flashcard-card" id="flashcard-card">
+                            <div class="flashcard-face flashcard-front">
+                                <span class="card-side-label">PROMPT (CLICK TO FLIP)</span>
+                                <h3 id="card-front-text">What is a Sprint in Scrum?</h3>
+                                <span class="card-hint">💡 Tap to reveal answer</span>
+                            </div>
+                            <div class="flashcard-face flashcard-back">
+                                <span class="card-side-label">ANSWER & EXPLANATION</span>
+                                <p id="card-back-text">A fixed timebox of 1 to 4 weeks during which the team builds a usable product increment.</p>
+                                <div class="card-meta">
+                                    <span class="card-takeaway" id="card-takeaway-text">Memory Hook: Consistent duration, no scope creep.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flashcard-nav">
+                        <button class="btn btn-secondary" onclick="prevFlashcard()">⬅️ Previous</button>
+                        <span id="flashcard-index">Card 1 of 5</span>
+                        <button class="btn btn-primary" onclick="nextFlashcard()">Next ➡️</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: WEAK TOPIC REVISION ROADMAP -->
+            <section class="tab-content" id="tab-revise">
+                <div class="grid-2-col">
+                    <div class="card">
+                        <h2 class="card-title">Topic Mastery & Weak Area Diagnostics</h2>
+                        <p class="card-subtitle">Topics with under 70% accuracy are automatically flagged for revision.</p>
+                        
+                        <div class="mastery-bars-list" id="mastery-bars-list">
+                            <!-- Loaded dynamically -->
+                        </div>
+
+                        <div style="margin-top: 1.5rem;">
+                            <button class="btn btn-primary" id="btn-generate-revision" onclick="generateRevisionRoadmap()">
+                                🎯 Generate Targeted Revision Roadmap
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">Your 15-Minute Revision Plan</h2>
+                        <p class="card-subtitle">AI Study Coach guidance based on your missed questions.</p>
+                        <div class="revision-plan-output" id="revision-plan-output">
+                            <p class="placeholder-text">Take quizzes or click "Generate Targeted Revision Roadmap" to synthesize your study guide!</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: EMAIL OTP VERIFICATION SCREEN       -->
+    <!-- ========================================== -->
+    <div class="modal-overlay hidden" id="modal-otp-verify">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-icon">🔐</div>
+                <h2>Verify your email address</h2>
+                <p class="modal-subtitle">
+                    We've sent a 6-digit verification code to <br>
+                    <strong id="otp-destination-display" class="highlight-text">your email</strong>
+                </p>
+            </div>
+
+            <div class="otp-input-container">
+                <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" id="otp-d-1" autofocus>
+                <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" id="otp-d-2">
+                <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" id="otp-d-3">
+                <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" id="otp-d-4">
+                <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" id="otp-d-5">
+                <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" id="otp-d-6">
+            </div>
+
+            <div class="otp-error-msg hidden" id="otp-error-msg">Invalid or expired code. Please try again.</div>
+
+            <div class="modal-actions-stacked">
+                <button class="btn btn-primary btn-block" id="btn-submit-otp" onclick="submitOtpCode()">
+                    <span id="btn-verify-text">Verify & Continue 🚀</span>
+                    <span class="btn-spinner hidden" id="spinner-verify-otp"></span>
+                </button>
+
+                <div class="otp-resend-row">
+                    <span>Didn't get the code?</span>
+                    <button class="btn-link" id="btn-resend-otp" onclick="resendOtpCode()" disabled>Resend Code</button>
+                    <span class="otp-cooldown" id="otp-cooldown-text">(60s)</span>
+                </div>
+
+                <div class="otp-change-email">
+                    <button class="btn-link text-muted" onclick="editOtpEmail()">Wrong email? Change address</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDITABLE USER PROFILE               -->
+    <!-- ========================================== -->
+    <div class="modal-overlay hidden" id="modal-profile">
+        <div class="modal-card modal-profile-card">
+            <div class="modal-header">
+                <div class="modal-icon">👤</div>
+                <h2>Your Student Profile</h2>
+                <p class="modal-subtitle">Personalize your learning preferences and study identity.</p>
+            </div>
+
+            <form class="profile-form" onsubmit="handleSaveProfile(event)">
+                <div class="form-grid">
+                    <div class="input-field-group">
+                        <label for="profile-input-fullname" class="input-label">Full Name</label>
+                        <input type="text" id="profile-input-fullname" class="input-text" placeholder="e.g. Alex Johnson" required>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="profile-input-email" class="input-label">Verified Email (Read-Only Identity)</label>
+                        <input type="email" id="profile-input-email" class="input-text input-readonly" readonly disabled>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="profile-input-avatar" class="input-label">Avatar URL (Optional)</label>
+                        <input type="url" id="profile-input-avatar" class="input-text" placeholder="https://images.unsplash.com/...">
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="profile-input-education" class="input-label">Education Level</label>
+                        <select id="profile-input-education" class="select-dropdown">
+                            <option value="High School">High School</option>
+                            <option value="Undergraduate" selected>Undergraduate / College</option>
+                            <option value="Graduate">Graduate / Master's</option>
+                            <option value="Doctorate">PhD / Doctorate</option>
+                            <option value="Professional">Professional / Lifelong Learner</option>
+                        </select>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="profile-input-field" class="input-label">Field of Study / Major</label>
+                        <input type="text" id="profile-input-field" class="input-text" placeholder="e.g. Computer Science, Medicine, Law">
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="profile-input-language" class="input-label">Preferred Language</label>
+                        <select id="profile-input-language" class="select-dropdown">
+                            <option value="en" selected>English</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="hi">हिन्दी (Hindi)</option>
+                        </select>
+                    </div>
+
+                    <div class="input-field-group full-width">
+                        <label for="profile-input-goals" class="input-label">Primary Learning Goals</label>
+                        <textarea id="profile-input-goals" class="textarea-input" rows="2" placeholder="e.g. Ace my final exams, master distributed systems, retain vocabulary"></textarea>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="profile-input-theme" class="input-label">Preferred Theme</label>
+                        <select id="profile-input-theme" class="select-dropdown">
+                            <option value="dark">Dark Theme (Default)</option>
+                            <option value="light">Light Theme</option>
+                        </select>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label class="input-label">Member Since</label>
+                        <div class="readonly-badge" id="profile-display-created">October 2026</div>
+                    </div>
+                </div>
+
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-profile')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-profile">
+                        <span id="btn-save-profile-text">Save Changes 💾</span>
+                        <span class="btn-spinner hidden" id="spinner-save-profile"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: PRIVACY POLICY                      -->
+    <!-- ========================================== -->
+    <div class="modal-overlay hidden" id="modal-privacy">
+        <div class="modal-card modal-legal-card">
+            <div class="modal-header">
+                <h2>Privacy Policy</h2>
+                <p class="modal-subtitle">Last updated: October 2026</p>
+            </div>
+            <div class="legal-content">
+                <h4>1. Information We Collect</h4>
+                <p>StudyAgent collects your email address, profile preferences, and documents you upload to your private study vault to generate personalized quizzes and study summaries.</p>
+                
+                <h4>2. Document Isolation & Security</h4>
+                <p>Your uploaded study notes are embedded in isolated vectors scoped strictly to your authenticated user ID. No other user can access, read, or query your private documents.</p>
+
+                <h4>3. Authentication Security</h4>
+                <p>We use official Google OAuth and one-time passwordless email verification codes. Passwords, auth secrets, and credentials are never stored in plain text.</p>
+
+                <h4>4. Data Deletion</h4>
+                <p>You may request full removal of your documents, quiz history, and account profile at any time through settings or by contacting our team.</p>
+            </div>
+            <div class="modal-form-actions">
+                <button class="btn btn-primary" onclick="closeModal('modal-privacy')">I Understand</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: TERMS OF SERVICE                   -->
+    <!-- ========================================== -->
+    <div class="modal-overlay hidden" id="modal-terms">
+        <div class="modal-card modal-legal-card">
+            <div class="modal-header">
+                <h2>Terms of Service</h2>
+                <p class="modal-subtitle">Last updated: October 2026</p>
+            </div>
+            <div class="legal-content">
+                <h4>1. Acceptance of Terms</h4>
+                <p>By accessing AI Study Agent, you agree to use our study synthesis, quiz generation, and active recall tools for educational and academic improvement.</p>
+
+                <h4>2. Permitted Use</h4>
+                <p>You agree not to upload copyrighted content you do not have permission to study with, or upload malicious payloads or harmful materials.</p>
+
+                <h4>3. AI Generation Disclaimer</h4>
+                <p>While our RAG engine strictly grounds quizzes and explanations in your uploaded notes, AI-generated explanations are study aids and should be cross-referenced with your official course syllabi.</p>
+            </div>
+            <div class="modal-form-actions">
+                <button class="btn btn-primary" onclick="closeModal('modal-terms')">I Accept</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Client Script -->
     <script src="/static/app.js"></script>
 </body>
 </html>

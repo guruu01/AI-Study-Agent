@@ -67,16 +67,92 @@ If you haven't pushed this folder to GitHub yet:
 
 ---
 
-## 🚂 Alternative: Deploy to Railway (1 Click)
-1. Go to **[Railway.app](https://railway.app)**.
-2. Click **"New Project"** ➡️ **"Deploy from GitHub repo"**.
-3. Add the environment variables (`TELEGRAM_BOT_TOKEN`, `GROQ_API_KEY`, `START_BOT=true`).
-4. Railway will automatically build the `Dockerfile` and launch your bot in ~60 seconds.
+## 🔐 Step 4: Supabase PostgreSQL Database & Authentication Setup
+
+StudyAgent uses **Supabase** for secure PostgreSQL persistence, Row Level Security (RLS) data isolation, Google OAuth, and passwordless 6-digit Email OTP verification.
+
+### 4.1 Create a Free Supabase Project
+1. Go to **[supabase.com](https://supabase.com/)** and sign in or create an account.
+2. Click **"New Project"**, name it `ai-study-agent`, choose a strong database password, and select your preferred region.
+3. Once created, go to **Project Settings** (gear icon) ➡️ **API**.
+4. Copy the following keys:
+   * **Project URL** (e.g. `https://xyzproject.supabase.co`) -> `SUPABASE_URL`
+   * **anon public key** -> `SUPABASE_ANON_KEY`
+   * **service_role secret key** -> `SUPABASE_SERVICE_ROLE_KEY`
+
+### 4.2 Run Database Migrations & RLS Policies
+1. In your Supabase dashboard, click **"SQL Editor"** in the left sidebar.
+2. Click **"New Query"**.
+3. Open [`supabase_schema.sql`](supabase_schema.sql) in this repository, copy its entire contents, and paste into the SQL Editor.
+4. Click **"Run"**.
+5. This creates the following tables with Row Level Security:
+   * `profiles`: User identity, avatar, education level, field of study, learning goals, preferred theme, language.
+   * `study_sessions`: Detailed study time and activity records.
+   * `study_progress`: Milestone and completion tracking.
+   * `quiz_history`: Question history, accuracy, and citations.
+   * `user_preferences`: Study settings and goals.
+   * Automated trigger: When a user registers via Google or Email OTP, their profile is automatically initialized with secure defaults.
+
+### 4.3 Configure Google Cloud OAuth
+1. Go to **[Google Cloud Console](https://console.cloud.google.com/apis/credentials)**.
+2. Create a new project or select an existing one.
+3. Configure the **OAuth Consent Screen**:
+   * User Type: **External**
+   * App Name: `StudyAgent.AI`
+   * User Support Email: your email
+   * Authorized Domains: `supabase.co`
+4. Go to **Credentials** ➡️ **Create Credentials** ➡️ **OAuth client ID**:
+   * Application type: **Web application**
+   * Name: `StudyAgent Web Client`
+   * **Authorized JavaScript origins**:
+     * `http://localhost:8000`
+     * `https://ai-study-agent-og58.onrender.com`
+     * `https://YOUR-SUPABASE-PROJECT-ID.supabase.co`
+   * **Authorized redirect URIs**:
+     * `https://YOUR-SUPABASE-PROJECT-ID.supabase.co/auth/v1/callback`
+5. Copy the generated **Client ID** and **Client Secret**.
+6. Back in your **Supabase Dashboard**:
+   * Navigate to **Authentication** ➡️ **Providers** ➡️ **Google**.
+   * Toggle **"Enable Google"** to **ON**.
+   * Paste your **Client ID** and **Client Secret**.
+   * Click **Save**.
+
+### 4.4 Configure Passwordless Email OTP
+1. In Supabase Dashboard, go to **Authentication** ➡️ **URL Configuration**:
+   * **Site URL**: `https://ai-study-agent-og58.onrender.com`
+   * **Redirect URLs**:
+     * `http://localhost:8000/**`
+     * `https://ai-study-agent-og58.onrender.com/**`
+2. Go to **Authentication** ➡️ **Email Templates** ➡️ **Magic Link / Confirmation**:
+   * Subject: `Your StudyAgent Verification Code: {{ .Token }}`
+   * Content:
+     ```html
+     <h2>Verify your email address</h2>
+     <p>Your one-time 6-digit verification code for StudyAgent.AI is:</p>
+     <h1 style="letter-spacing: 5px; color: #6366f1;">{{ .Token }}</h1>
+     <p>This code expires in 10 minutes. If you did not request this, you can safely ignore this email.</p>
+     ```
+   * Click **Save**.
+
+---
+
+## 🛠️ Step 5: Render Environment Variables
+Add these environment variables in your Render Web Service dashboard (**Environment** tab):
+
+| Variable Name | Example Value | Description |
+| :--- | :--- | :--- |
+| `GROQ_API_KEY` | `gsk_...` | Free fast Llama 3.3 70B inference |
+| `TELEGRAM_BOT_TOKEN` | `123456:ABC...` | Telegram bot daemon |
+| `START_BOT` | `true` | Starts background bot runner |
+| `SUPABASE_URL` | `https://xyz.supabase.co` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | `eyJh...` | Public client publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJh...` | Server backend secret key |
 
 ---
 
 ## ✅ What Happens After Deployment:
-* Your Telegram bot (`@Guru_vip_alert_bot`) will stay **online 24/7/365**.
-* It runs on **Llama 3.3 70B** via Groq with sub-second response times.
-* Anyone you share the bot link with (`t.me/Guru_vip_alert_bot`) can take quizzes, get summaries, and upload notes anytime.
-* Your Web Dashboard will be live at a public HTTPS URL (e.g. `https://ai-study-agent.onrender.com`).
+* Unauthenticated visitors see the **Authentication Landing Page** with Google Login, Email OTP, and feature showcases.
+* Authenticated students receive a **Personalized Dashboard** with real study time, total sessions, accuracy %, recent activity timeline, and editable profile.
+* Full **Light & Dark Theme** toggle with automatic database persistence across devices.
+* Telegram bot (`@Guru_vip_alert_bot`) continues running online 24/7/365.
+* Your Web Dashboard is live at: `https://ai-study-agent-og58.onrender.com/`
